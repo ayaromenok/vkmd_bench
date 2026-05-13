@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
+#include <unistd.h>
 #include <vulkan/vulkan.h>
 #include "args.h"
 
@@ -321,16 +322,9 @@ int main(int argc, char** argv) {
     VkCommandBuffer commandBuffer;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
 
-    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
-    PushConstants pc = {N_SIZE, N_SIZE, N_SIZE};
-    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-    vkCmdDispatch(commandBuffer, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
-    vkEndCommandBuffer(commandBuffer);
-
-    printf("Iterations: %u\n", args.iterations);
+    printf("Benchmarking from 32x32 to %ux%u with step 32...\n\n", N_SIZE, N_SIZE);
+    printf("| Matrix Size | Perf,GFLOPS |\n");
+    printf("|-------------|-------------|\n");
 
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -338,24 +332,46 @@ int main(int argc, char** argv) {
         .pCommandBuffers = &commandBuffer,
     };
 
-    // Warm-up
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
+    for (uint32_t current_n = 32; ; ) {
+        if (current_n > N_SIZE) break;
+        // Record command buffer for current size
+        VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+        PushConstants pc = {current_n, current_n, current_n};
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+        vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
+        vkEndCommandBuffer(commandBuffer);
 
-    double start_time = get_time_sec();
-    for (uint32_t i = 0; i < args.iterations; i++) {
+        // Warm-up
         vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(queue); // Simple sync for benchmarking
+        vkQueueWaitIdle(queue);
+
+        // Run for approximately 2 seconds
+        uint32_t count = 0;
+        double start_time = get_time_sec();
+        while (get_time_sec() - start_time < 2.0) {
+            vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+            vkQueueWaitIdle(queue);
+            count++;
+        }
+        double end_time = get_time_sec();
+        double total_time = end_time - start_time;
+        double avg_time = total_time / count;
+        double gflops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+
+        printf("| %4u x %-4u | %11.3f |\n", current_n, current_n, gflops);
+        fflush(stdout);
+
+        if (current_n >= N_SIZE) break;
+        uint32_t next_n = current_n + 32;
+        if (next_n > N_SIZE) next_n = N_SIZE;
+        current_n = next_n;
+        
+        sleep(2);
     }
-    double end_time = get_time_sec();
-    double total_time = end_time - start_time;
-    double avg_time = total_time / args.iterations;
-
-    double gflops = (2.0 * N_SIZE * N_SIZE * N_SIZE) / (avg_time * 1e9);
-
-    printf("Total time: %.3f s\n", total_time);
-    printf("Avg time per iteration: %.3f ms\n", avg_time * 1000.0);
-    printf("Performance: %.3f GFLOPS\n", gflops);
+    printf("\n");
 
     uint16_t* dataC;
     vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);
