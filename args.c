@@ -6,6 +6,8 @@
 AppArgs parse_args(int argc, char** argv) {
     AppArgs args = { 
         .matrix_size = 1024, 
+        .matrix_start_size = 32,
+        .matrix_step_size = 32,
         .iterations = 10, 
         .device_index = 0, 
         .list_devices = 0, 
@@ -16,6 +18,20 @@ AppArgs parse_args(int argc, char** argv) {
         if (strcmp(argv[i], "-ms") == 0 || strcmp(argv[i], "--matrix-size") == 0) {
             if (i + 1 < argc) {
                 args.matrix_size = atoi(argv[++i]);
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
+        } else if (strcmp(argv[i], "-mss") == 0 || strcmp(argv[i], "--matrix-start-size") == 0) {
+            if (i + 1 < argc) {
+                args.matrix_start_size = atoi(argv[++i]);
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
+        } else if (strcmp(argv[i], "-mis") == 0 || strcmp(argv[i], "--matrix-increment-step") == 0) {
+            if (i + 1 < argc) {
+                args.matrix_step_size = atoi(argv[++i]);
             } else {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
@@ -56,13 +72,15 @@ AppArgs parse_args(int argc, char** argv) {
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
-            printf("  -ms, --matrix-size <size>   Set matrix size (default: 1024)\n");
-            printf("  -i, --iterations <count>    Set benchmarking iterations (default: 10)\n");
-            printf("  -d, --device <index>        Select Vulkan device index (default: 0)\n");
-            printf("  -dt, --data-type <type>     Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
-            printf("  -dl, --device-list          List available Vulkan devices and exit\n");
-            printf("  -csv, --save-csv            Save results to CSV file\n");
-            printf("  -h, --help                  Show this help message\n");
+            printf("  -m, --matrix-size <size>        Set max matrix size (default: 1024)\n");
+            printf("  -mss, --matrix-start-size <sz>  Set start matrix size (default: 32)\n");
+            printf("  -ms, --matrix-step <step>       Set matrix step (default: 32)\n");
+            printf("  -i, --iterations <count>        Set benchmarking iterations (default: 10)\n");
+            printf("  -d, --device <index>            Select Vulkan device index (default: 0)\n");
+            printf("  -dt, --data-type <type>         Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
+            printf("  -dl, --device-list              List available Vulkan devices and exit\n");
+            printf("  -csv, --save-csv                Save results to CSV file\n");
+            printf("  -h, --help                      Show this help message\n");
             exit(0);
         }
     }

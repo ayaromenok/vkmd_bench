@@ -386,7 +386,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    printf("Benchmarking %s from 32x32 to %ux%u with step 32...\n\n", type_str, N_SIZE, N_SIZE);
+    printf("Benchmarking %s from %ux%u to %ux%u with step %u...\n\n", type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
     printf("| Matrix Size | Perf, %s |\n", perf_label);
     printf("|-------------|--------------|\n");
 
@@ -396,7 +396,7 @@ int main(int argc, char** argv) {
         .pCommandBuffers = &commandBuffer,
     };
 
-    for (uint32_t current_n = 32; ; ) {
+    for (uint32_t current_n = args.matrix_start_size; ; ) {
         if (current_n > N_SIZE) break;
         // Record command buffer for current size
         VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
@@ -434,7 +434,7 @@ int main(int argc, char** argv) {
         }
 
         if (current_n >= N_SIZE) break;
-        uint32_t next_n = current_n + 32;
+        uint32_t next_n = current_n + args.matrix_step_size;
         if (next_n > N_SIZE) next_n = N_SIZE;
         current_n = next_n;
         
