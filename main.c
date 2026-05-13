@@ -1,0 +1,308 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <vulkan/vulkan.h>
+
+#define N_SIZE 1024
+#define WORKGROUP_SIZE 16
+
+// Simple float32 to float16 conversion (IEEE 754)
+uint16_t float32_to_float16(float f) {
+    uint32_t i = *(uint32_t*)&f;
+    uint32_t s = (i >> 16) & 0x8000;
+    uint32_t e = ((i >> 23) & 0xff);
+    uint32_t m = i & 0x7fffff;
+
+    if (e == 0) return s; // flush to zero
+    if (e == 0xff) return s | 0x7c00 | (m ? 1 : 0); // inf/nan
+
+    int new_e = (int)e - 127 + 15;
+    if (new_e <= 0) return s; // flush to zero
+    if (new_e >= 31) return s | 0x7c00; // inf
+
+    return (uint16_t)(s | (new_e << 10) | (m >> 13));
+}
+
+float float16_to_float32(uint16_t h) {
+    uint32_t s = (h & 0x8000) << 16;
+    uint32_t e = (h & 0x7c00) >> 10;
+    uint32_t m = (h & 0x03ff) << 13;
+
+    if (e == 0) {
+        if (m == 0) return *(float*)&s;
+        while (!(m & 0x00800000)) { m <<= 1; e--; }
+        e++; m &= ~0x00800000;
+    } else if (e == 0x1f) {
+        e = 0xff;
+    } else {
+        e += (127 - 15);
+    }
+    uint32_t i = s | (e << 23) | m;
+    return *(float*)&i;
+}
+
+typedef struct {
+    uint32_t M, N, K;
+} PushConstants;
+
+void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size, VkBuffer* buffer, VkDeviceMemory* memory) {
+    VkBufferCreateInfo bufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = size,
+        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    vkCreateBuffer(device, &bufferInfo, NULL, buffer);
+
+    VkMemoryRequirements memReqs;
+    vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
+
+    VkPhysicalDeviceMemoryProperties memProps;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
+
+    uint32_t memoryTypeIndex = (uint32_t)-1;
+    for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+        if ((memReqs.memoryTypeBits & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memReqs.size,
+        .memoryTypeIndex = memoryTypeIndex,
+    };
+    vkAllocateMemory(device, &allocInfo, NULL, memory);
+    vkBindBufferMemory(device, *buffer, *memory, 0);
+}
+
+int main() {
+    VkResult res;
+
+    VkApplicationInfo appInfo = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = "Vulkan MatMul FP16",
+        .apiVersion = VK_API_VERSION_1_1,
+    };
+
+    VkInstanceCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &appInfo,
+    };
+
+    VkInstance instance;
+    vkCreateInstance(&createInfo, NULL, &instance);
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+    VkPhysicalDevice* devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
+    vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
+    VkPhysicalDevice physicalDevice = devices[0];
+
+    VkPhysicalDeviceProperties deviceProps;
+    vkGetPhysicalDeviceProperties(physicalDevice, &deviceProps);
+    printf("Using device: %s\n", deviceProps.deviceName);
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
+    VkQueueFamilyProperties* queueFamilies = malloc(sizeof(VkQueueFamilyProperties) * queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies);
+
+    uint32_t computeQueueFamilyIndex = (uint32_t)-1;
+    for (uint32_t i = 0; i < queueFamilyCount; i++) {
+        if (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+            computeQueueFamilyIndex = i;
+            break;
+        }
+    }
+
+    float queuePriority = 1.0f;
+    VkDeviceQueueCreateInfo queueCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = computeQueueFamilyIndex,
+        .queueCount = 1,
+        .pQueuePriorities = &queuePriority,
+    };
+
+    VkPhysicalDeviceShaderFloat16Int8Features float16Features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES,
+        .shaderFloat16 = VK_TRUE,
+    };
+
+    VkPhysicalDevice16BitStorageFeatures storage16Features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
+        .pNext = &float16Features,
+        .storageBuffer16BitAccess = VK_TRUE,
+    };
+
+    const char* deviceExtensions[] = {
+        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
+        VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME
+    };
+
+    VkDeviceCreateInfo deviceCreateInfo = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = &storage16Features,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queueCreateInfo,
+        .enabledExtensionCount = 3,
+        .ppEnabledExtensionNames = deviceExtensions,
+    };
+
+    VkDevice device;
+    vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device);
+
+    VkQueue queue;
+    vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
+
+    size_t matrixSize = N_SIZE * N_SIZE * sizeof(uint16_t);
+    VkBuffer bufferA, bufferB, bufferC;
+    VkDeviceMemory memoryA, memoryB, memoryC;
+
+    createBuffer(device, physicalDevice, matrixSize, &bufferA, &memoryA);
+    createBuffer(device, physicalDevice, matrixSize, &bufferB, &memoryB);
+    createBuffer(device, physicalDevice, matrixSize, &bufferC, &memoryC);
+
+    uint16_t *dataA, *dataB;
+    vkMapMemory(device, memoryA, 0, matrixSize, 0, (void**)&dataA);
+    vkMapMemory(device, memoryB, 0, matrixSize, 0, (void**)&dataB);
+    for (int i = 0; i < N_SIZE * N_SIZE; i++) {
+        dataA[i] = float32_to_float16(1.0f);
+        dataB[i] = float32_to_float16(2.0f);
+    }
+    vkUnmapMemory(device, memoryA);
+    vkUnmapMemory(device, memoryB);
+
+    VkDescriptorSetLayoutBinding bindings[3] = {
+        {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+        {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
+    };
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 3,
+        .pBindings = bindings,
+    };
+    VkDescriptorSetLayout descriptorSetLayout;
+    vkCreateDescriptorSetLayout(device, &layoutInfo, NULL, &descriptorSetLayout);
+
+    VkDescriptorPoolSize poolSize = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3};
+    VkDescriptorPoolCreateInfo poolInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = 1,
+        .poolSizeCount = 1,
+        .pPoolSizes = &poolSize,
+    };
+    VkDescriptorPool descriptorPool;
+    vkCreateDescriptorPool(device, &poolInfo, NULL, &descriptorPool);
+
+    VkDescriptorSetAllocateInfo setAllocInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptorPool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
+    };
+    VkDescriptorSet descriptorSet;
+    vkAllocateDescriptorSets(device, &setAllocInfo, &descriptorSet);
+
+    VkDescriptorBufferInfo bufferInfos[3] = {
+        {bufferA, 0, matrixSize},
+        {bufferB, 0, matrixSize},
+        {bufferC, 0, matrixSize},
+    };
+    VkWriteDescriptorSet writes[3] = {
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[0]},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 1, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[1]},
+        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[2]},
+    };
+    vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+
+    FILE* f = fopen("matmul.spv", "rb");
+    fseek(f, 0, SEEK_END);
+    long length = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint32_t* code = malloc(length);
+    fread(code, 1, length, f);
+    fclose(f);
+
+    VkShaderModuleCreateInfo shaderInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = length,
+        .pCode = code,
+    };
+    VkShaderModule shaderModule;
+    vkCreateShaderModule(device, &shaderInfo, NULL, &shaderModule);
+
+    VkPushConstantRange pushConstantRange = {
+        .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+        .offset = 0,
+        .size = sizeof(PushConstants),
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange,
+    };
+    VkPipelineLayout pipelineLayout;
+    vkCreatePipelineLayout(device, &pipelineLayoutInfo, NULL, &pipelineLayout);
+
+    VkComputePipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+        .stage = {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+            .module = shaderModule,
+            .pName = "main",
+        },
+        .layout = pipelineLayout,
+    };
+    VkPipeline pipeline;
+    vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &pipeline);
+
+    VkCommandPoolCreateInfo commandPoolInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .queueFamilyIndex = computeQueueFamilyIndex,
+    };
+    VkCommandPool commandPool;
+    vkCreateCommandPool(device, &commandPoolInfo, NULL, &commandPool);
+
+    VkCommandBufferAllocateInfo cmdAllocInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = commandPool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
+    PushConstants pc = {N_SIZE, N_SIZE, N_SIZE};
+    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+    vkCmdDispatch(commandBuffer, N_SIZE / WORKGROUP_SIZE, N_SIZE / WORKGROUP_SIZE, 1);
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+    };
+    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue);
+
+    uint16_t* dataC;
+    vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);
+    printf("Result [0,0]: %f\n", float16_to_float32(dataC[0]));
+    printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+    vkUnmapMemory(device, memoryC);
+
+    return 0;
+}
