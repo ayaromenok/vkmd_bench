@@ -88,7 +88,6 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
 int main(int argc, char** argv) {
     AppArgs args = parse_args(argc, argv);
     uint32_t N_SIZE = args.matrix_size;
-    printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
 
     VkResult res;
 
@@ -108,13 +107,38 @@ int main(int argc, char** argv) {
 
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
+    if (deviceCount == 0) { fprintf(stderr, "No Vulkan devices found\n"); return 1; }
+    
     VkPhysicalDevice* devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
-    VkPhysicalDevice physicalDevice = devices[0];
+    
+    if (args.list_devices) {
+        printf("Available Vulkan devices:\n");
+        for (uint32_t i = 0; i < deviceCount; i++) {
+            VkPhysicalDeviceProperties props;
+            vkGetPhysicalDeviceProperties(devices[i], &props);
+            printf("[%u] %s\n", i, props.deviceName);
+        }
+        return 0;
+    }
+
+    if (args.device_index >= deviceCount) {
+        fprintf(stderr, "Error: Selected device index %u is out of bounds (found %u devices)\n", args.device_index, deviceCount);
+        printf("Available devices:\n");
+        for (uint32_t i = 0; i < deviceCount; i++) {
+            VkPhysicalDeviceProperties props;
+            vkGetPhysicalDeviceProperties(devices[i], &props);
+            printf("[%u] %s\n", i, props.deviceName);
+        }
+        return 1;
+    }
+
+    VkPhysicalDevice physicalDevice = devices[args.device_index];
 
     VkPhysicalDeviceProperties deviceProps;
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProps);
-    printf("Using device: %s\n", deviceProps.deviceName);
+    printf("Using device [%u]: %s\n", args.device_index, deviceProps.deviceName);
+    printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
