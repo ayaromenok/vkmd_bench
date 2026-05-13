@@ -55,11 +55,11 @@ typedef struct {
     uint32_t M, N, K;
 } PushConstants;
 
-void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size, VkBuffer* buffer, VkDeviceMemory* memory) {
+void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* memory) {
     VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = size,
-        .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     VkResult resBuf = vkCreateBuffer(device, &bufferInfo, NULL, buffer);
@@ -77,10 +77,9 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
     uint32_t memoryTypeIndex = (uint32_t)-1;
     VkResult resAlloc = VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
-    // First try to find and allocate a memory type that is HOST_VISIBLE, HOST_COHERENT, and DEVICE_LOCAL
     for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
         if ((memReqs.memoryTypeBits & (1 << i)) && 
-            (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            (memProps.memoryTypes[i].propertyFlags & properties) == properties) {
             
             VkMemoryAllocateInfo allocInfo = {
                 .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -95,37 +94,19 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
         }
     }
 
-    // If not found or failed, fallback to HOST_VISIBLE and HOST_COHERENT
-    if (resAlloc != VK_SUCCESS) {
-        for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-            if ((memReqs.memoryTypeBits & (1 << i)) && 
-                (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-                
-                VkMemoryAllocateInfo allocInfo = {
-                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                    .allocationSize = memReqs.size,
-                    .memoryTypeIndex = i,
-                };
-                resAlloc = vkAllocateMemory(device, &allocInfo, NULL, memory);
-                if (resAlloc == VK_SUCCESS) {
-                    memoryTypeIndex = i;
-                    break;
-                }
-            }
-        }
-    }
-
     if (resAlloc != VK_SUCCESS) {
         fprintf(stderr, "Failed to allocate memory (res: %d)\n", resAlloc);
         exit(1);
     }
     vkBindBufferMemory(device, *buffer, *memory, 0);
 
-    if (memProps.memoryTypes[memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-        printf("Buffer allocated in DEVICE LOCAL memory (size: %zu MB)\n", size/1024/1024);
-    } else {
-        printf("Buffer allocated in HOST memory (NOT device local) (size: %zu MB)\n", size/1024/1024);
+    const char* memTypeStr = "UNKNOWN";
+    if (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+        memTypeStr = "DEVICE LOCAL";
+    } else if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+        memTypeStr = "HOST VISIBLE";
     }
+    printf("Buffer allocated in %s memory (size: %zu MB)\n", memTypeStr, size/1024/1024);
 }
 
 int main(int argc, char** argv) {
@@ -272,24 +253,29 @@ int main(int argc, char** argv) {
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
-    printf("Creating buffer A...\n"); fflush(stdout);
-    createBuffer(device, physicalDevice, matrixSize, &bufferA, &memoryA);
-    printf("Creating buffer B...\n"); fflush(stdout);
-    createBuffer(device, physicalDevice, matrixSize, &bufferB, &memoryB);
-    printf("Creating buffer C...\n"); fflush(stdout);
-    createBuffer(device, physicalDevice, matrixSize, &bufferC, &memoryC);
+    printf("Creating device buffers...\n"); fflush(stdout);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferA, &memoryA);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferB, &memoryB);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferC, &memoryC);
 
-    printf("Mapping memory...\n"); fflush(stdout);
+    VkBuffer stagingA, stagingB, stagingC;
+    VkDeviceMemory stagingMemoryA, stagingMemoryB, stagingMemoryC;
+    printf("Creating staging buffers...\n"); fflush(stdout);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingA, &stagingMemoryA);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingB, &stagingMemoryB);
+    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingC, &stagingMemoryC);
+
+    printf("Mapping staging memory...\n"); fflush(stdout);
     void *dataA_mapped = NULL, *dataB_mapped = NULL;
-    VkResult resA = vkMapMemory(device, memoryA, 0, matrixSize, 0, &dataA_mapped);
-    VkResult resB = vkMapMemory(device, memoryB, 0, matrixSize, 0, &dataB_mapped);
+    VkResult resA = vkMapMemory(device, stagingMemoryA, 0, matrixSize, 0, &dataA_mapped);
+    VkResult resB = vkMapMemory(device, stagingMemoryB, 0, matrixSize, 0, &dataB_mapped);
     
     if (resA != VK_SUCCESS || dataA_mapped == NULL) {
-        fprintf(stderr, "Failed to map memory A (res: %d)\n", resA);
+        fprintf(stderr, "Failed to map staging memory A (res: %d)\n", resA);
         exit(1);
     }
     if (resB != VK_SUCCESS || dataB_mapped == NULL) {
-        fprintf(stderr, "Failed to map memory B (res: %d)\n", resB);
+        fprintf(stderr, "Failed to map staging memory B (res: %d)\n", resB);
         exit(1);
     }
 
@@ -458,6 +444,21 @@ int main(int argc, char** argv) {
         }
     }
 
+    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkBufferCopy copyRegion = { .srcOffset = 0, .dstOffset = 0, .size = matrixSize };
+    vkCmdCopyBuffer(commandBuffer, stagingA, bufferA, 1, &copyRegion);
+    vkCmdCopyBuffer(commandBuffer, stagingB, bufferB, 1, &copyRegion);
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo copySubmitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+    };
+    vkQueueSubmit(queue, 1, &copySubmitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue);
+
     printf("Benchmarking %s from %ux%u to %ux%u with step %u...\n\n", type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
     printf("| Matrix Size | Perf, %s |\n", perf_label);
     printf("|-------------|--------------|\n");
@@ -484,10 +485,10 @@ int main(int argc, char** argv) {
         vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(queue);
 
-        // Run for approximately 2 seconds
+        // Run for approximately 5 seconds
         uint32_t count = 0;
         double start_time = get_time_sec();
-        while (get_time_sec() - start_time < 2.0) {
+        while (get_time_sec() - start_time < 5.0) {
             vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
             vkQueueWaitIdle(queue);
             count++;
@@ -510,13 +511,27 @@ int main(int argc, char** argv) {
         if (next_n > N_SIZE) next_n = N_SIZE;
         current_n = next_n;
         
-        sleep(2);
+        sleep(5);
     }
     printf("\n");
     if (csv_file) fclose(csv_file);
 
+    VkCommandBufferBeginInfo beginInfo2 = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    vkBeginCommandBuffer(commandBuffer, &beginInfo2);
+    VkBufferCopy copyRegionC = { .srcOffset = 0, .dstOffset = 0, .size = matrixSize };
+    vkCmdCopyBuffer(commandBuffer, bufferC, stagingC, 1, &copyRegionC);
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo copySubmitInfo2 = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &commandBuffer,
+    };
+    vkQueueSubmit(queue, 1, &copySubmitInfo2, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue);
+
     void* dataC_mapped;
-    vkMapMemory(device, memoryC, 0, matrixSize, 0, &dataC_mapped);
+    vkMapMemory(device, stagingMemoryC, 0, matrixSize, 0, &dataC_mapped);
     if (args.data_type == DT_FP16) {
         uint16_t* hC = (uint16_t*)dataC_mapped;
         printf("Result [0,0]: %f\n", float16_to_float32(hC[0]));
@@ -534,7 +549,7 @@ int main(int argc, char** argv) {
         printf("Result [0,0]: %d\n", (int)iC[0]);
         printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
     }
-    vkUnmapMemory(device, memoryC);
+    vkUnmapMemory(device, stagingMemoryC);
 
     return 0;
 }
