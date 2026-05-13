@@ -162,6 +162,10 @@ int main(int argc, char** argv) {
         .pQueuePriorities = &queuePriority,
     };
 
+    VkPhysicalDeviceFeatures deviceFeatures = {
+        .shaderInt16 = VK_TRUE
+    };
+
     VkPhysicalDeviceShaderFloat16Int8Features float16Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES,
         .shaderFloat16 = VK_TRUE,
@@ -182,6 +186,7 @@ int main(int argc, char** argv) {
     VkDeviceCreateInfo deviceCreateInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = &storage16Features,
+        .pEnabledFeatures = &deviceFeatures,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
         .enabledExtensionCount = 3,
@@ -205,12 +210,32 @@ int main(int argc, char** argv) {
     uint16_t *dataA, *dataB;
     vkMapMemory(device, memoryA, 0, matrixSize, 0, (void**)&dataA);
     vkMapMemory(device, memoryB, 0, matrixSize, 0, (void**)&dataB);
-    for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
-        dataA[i] = float32_to_float16(1.0f);
-        dataB[i] = float32_to_float16(2.0f);
+    if (args.data_type == DT_FP16) {
+        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+            dataA[i] = float32_to_float16(1.0f);
+            dataB[i] = float32_to_float16(2.0f);
+        }
+    } else {
+        int16_t* iA = (int16_t*)dataA;
+        int16_t* iB = (int16_t*)dataB;
+        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+            iA[i] = 1;
+            iB[i] = 2;
+        }
     }
     vkUnmapMemory(device, memoryA);
     vkUnmapMemory(device, memoryB);
+
+    const char* shaderFile = (args.data_type == DT_FP16) ? "matmul_fp16.spv" : "matmul_int16.spv";
+    FILE* f = fopen(shaderFile, "rb");
+    if (!f) { fprintf(stderr, "Error: Could not open %s. Make sure it is in the current directory.\n", shaderFile); return 1; }
+    fseek(f, 0, SEEK_END);
+    long length = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint32_t* code = malloc(length);
+    if (!code) { fprintf(stderr, "Failed to allocate memory for shader code\n"); return 1; }
+    fread(code, 1, length, f);
+    fclose(f);
 
     VkDescriptorSetLayoutBinding bindings[3] = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
@@ -256,18 +281,6 @@ int main(int argc, char** argv) {
     };
     vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
 
-    FILE* f = fopen("matmul.spv", "rb");
-    if (!f) {
-        fprintf(stderr, "Error: Could not open matmul.spv. Make sure it is in the current directory.\n");
-        return 1;
-    }
-    fseek(f, 0, SEEK_END);
-    long length = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint32_t* code = malloc(length);
-    if (!code) { fprintf(stderr, "Failed to allocate memory for shader code\n"); return 1; }
-    fread(code, 1, length, f);
-    fclose(f);
 
     VkShaderModuleCreateInfo shaderInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -322,6 +335,9 @@ int main(int argc, char** argv) {
     VkCommandBuffer commandBuffer;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
 
+    const char* type_str = (args.data_type == DT_FP16) ? "FP16" : "INT16";
+    const char* perf_label = (args.data_type == DT_FP16) ? "GFLOPS" : "GOPS";
+
     FILE* csv_file = NULL;
     if (args.save_csv) {
         FILE* pipe = popen("lact cli profile", "r");
@@ -333,22 +349,22 @@ int main(int argc, char** argv) {
                 while (len > 0 && (buffer[len-1] == '\n' || buffer[len-1] == '\r')) {
                     buffer[--len] = '\0';
                 }
-                snprintf(filename, sizeof(filename), "%s.csv", buffer);
+                snprintf(filename, sizeof(filename), "%s_%s.csv", buffer, type_str);
             }
             pclose(pipe);
         }
         csv_file = fopen(filename, "w");
         if (csv_file) {
-            fprintf(csv_file, "Matrix Size,Performance (GFLOPS)\n");
+            fprintf(csv_file, "Matrix Size,Performance (%s)\n", perf_label);
             printf("Saving results to %s\n", filename);
         } else {
             fprintf(stderr, "Warning: Could not open %s for writing\n", filename);
         }
     }
 
-    printf("Benchmarking from 32x32 to %ux%u with step 32...\n\n", N_SIZE, N_SIZE);
-    printf("| Matrix Size | Perf,GFLOPS |\n");
-    printf("|-------------|-------------|\n");
+    printf("Benchmarking %s from 32x32 to %ux%u with step 32...\n\n", type_str, N_SIZE, N_SIZE);
+    printf("| Matrix Size | Perf, %s |\n", perf_label);
+    printf("|-------------|--------------|\n");
 
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -383,13 +399,13 @@ int main(int argc, char** argv) {
         double end_time = get_time_sec();
         double total_time = end_time - start_time;
         double avg_time = total_time / count;
-        double gflops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+        double gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
 
-        printf("| %4u x %-4u | %11.3f |\n", current_n, current_n, gflops);
+        printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
         fflush(stdout);
 
         if (csv_file) {
-            fprintf(csv_file, "%u,%f\n", current_n, gflops);
+            fprintf(csv_file, "%u,%f\n", current_n, gops);
             fflush(csv_file);
         }
 
@@ -405,8 +421,14 @@ int main(int argc, char** argv) {
 
     uint16_t* dataC;
     vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);
-    printf("Result [0,0]: %f\n", float16_to_float32(dataC[0]));
-    printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+    if (args.data_type == DT_FP16) {
+        printf("Result [0,0]: %f\n", float16_to_float32(dataC[0]));
+        printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+    } else {
+        int16_t* iC = (int16_t*)dataC;
+        printf("Result [0,0]: %d\n", (int)iC[0]);
+        printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
+    }
     vkUnmapMemory(device, memoryC);
 
     return 0;

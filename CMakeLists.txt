@@ -3,15 +3,22 @@ project(vulkan_matmul_fp16 C)
 
 find_package(Vulkan REQUIRED)
 
-# Compile shader
+# Compile shaders
 add_custom_command(
-    OUTPUT matmul.spv
-    COMMAND glslc ${CMAKE_CURRENT_SOURCE_DIR}/matmul.comp -o matmul.spv
+    OUTPUT matmul_fp16.spv
+    COMMAND glslc -DDATA_TYPE=float16_t ${CMAKE_CURRENT_SOURCE_DIR}/matmul.comp -o matmul_fp16.spv
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/matmul.comp
-    COMMENT "Compiling compute shader to SPIR-V"
+    COMMENT "Compiling fp16 compute shader"
 )
 
-add_executable(matmul_vk main.c args.c matmul.spv)
+add_custom_command(
+    OUTPUT matmul_int16.spv
+    COMMAND glslc -DDATA_TYPE=int16_t ${CMAKE_CURRENT_SOURCE_DIR}/matmul.comp -o matmul_int16.spv
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/matmul.comp
+    COMMENT "Compiling int16 compute shader"
+)
+
+add_executable(matmul_vk main.c args.c matmul_fp16.spv matmul_int16.spv)
 
 target_include_directories(matmul_vk PRIVATE ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(matmul_vk PRIVATE ${Vulkan_LIBRARIES})

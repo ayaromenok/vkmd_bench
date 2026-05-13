@@ -1,18 +1,23 @@
 #version 450
-#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
+#ifndef DATA_TYPE
+#define DATA_TYPE float16_t
+#endif
+
 layout(set = 0, binding = 0) buffer MatrixA {
-    float16_t data[];
+    DATA_TYPE data[];
 } a;
 
 layout(set = 0, binding = 1) buffer MatrixB {
-    float16_t data[];
+    DATA_TYPE data[];
 } b;
 
 layout(set = 0, binding = 2) buffer MatrixC {
-    float16_t data[];
+    DATA_TYPE data[];
 } c;
 
 layout(push_constant) uniform PushConstants {
@@ -27,7 +32,7 @@ void main() {
 
     if (row >= pc.M || col >= pc.N) return;
 
-    float16_t sum = float16_t(0.0);
+    DATA_TYPE sum = DATA_TYPE(0);
     for (uint k = 0; k < pc.K; k++) {
         sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
     }
