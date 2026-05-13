@@ -8,6 +8,7 @@ typedef struct {
     uint32_t iterations;
     uint32_t device_index;
     int list_devices;
+    int save_csv;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);

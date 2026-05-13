@@ -322,6 +322,30 @@ int main(int argc, char** argv) {
     VkCommandBuffer commandBuffer;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
 
+    FILE* csv_file = NULL;
+    if (args.save_csv) {
+        FILE* pipe = popen("lact cli profile", "r");
+        char filename[256] = "results.csv";
+        if (pipe) {
+            char buffer[128];
+            if (fgets(buffer, 128, pipe)) {
+                size_t len = strlen(buffer);
+                while (len > 0 && (buffer[len-1] == '\n' || buffer[len-1] == '\r')) {
+                    buffer[--len] = '\0';
+                }
+                snprintf(filename, sizeof(filename), "%s.csv", buffer);
+            }
+            pclose(pipe);
+        }
+        csv_file = fopen(filename, "w");
+        if (csv_file) {
+            fprintf(csv_file, "Matrix Size,Performance (GFLOPS)\n");
+            printf("Saving results to %s\n", filename);
+        } else {
+            fprintf(stderr, "Warning: Could not open %s for writing\n", filename);
+        }
+    }
+
     printf("Benchmarking from 32x32 to %ux%u with step 32...\n\n", N_SIZE, N_SIZE);
     printf("| Matrix Size | Perf,GFLOPS |\n");
     printf("|-------------|-------------|\n");
@@ -364,6 +388,11 @@ int main(int argc, char** argv) {
         printf("| %4u x %-4u | %11.3f |\n", current_n, current_n, gflops);
         fflush(stdout);
 
+        if (csv_file) {
+            fprintf(csv_file, "%u,%f\n", current_n, gflops);
+            fflush(csv_file);
+        }
+
         if (current_n >= N_SIZE) break;
         uint32_t next_n = current_n + 32;
         if (next_n > N_SIZE) next_n = N_SIZE;
@@ -372,6 +401,7 @@ int main(int argc, char** argv) {
         sleep(2);
     }
     printf("\n");
+    if (csv_file) fclose(csv_file);
 
     uint16_t* dataC;
     vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);
