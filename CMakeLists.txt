@@ -11,7 +11,7 @@ add_custom_command(
     COMMENT "Compiling compute shader to SPIR-V"
 )
 
-add_executable(matmul_vk main.c matmul.spv)
+add_executable(matmul_vk main.c args.c matmul.spv)
 
 target_include_directories(matmul_vk PRIVATE ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(matmul_vk PRIVATE ${Vulkan_LIBRARIES})

@@ -3,8 +3,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <vulkan/vulkan.h>
+#include "args.h"
 
-#define N_SIZE 1024
 #define WORKGROUP_SIZE 16
 
 // Simple float32 to float16 conversion (IEEE 754)
@@ -78,7 +78,11 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
     vkBindBufferMemory(device, *buffer, *memory, 0);
 }
 
-int main() {
+int main(int argc, char** argv) {
+    AppArgs args = parse_args(argc, argv);
+    uint32_t N_SIZE = args.matrix_size;
+    printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
+
     VkResult res;
 
     VkApplicationInfo appInfo = {
@@ -158,7 +162,7 @@ int main() {
     VkQueue queue;
     vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
 
-    size_t matrixSize = N_SIZE * N_SIZE * sizeof(uint16_t);
+    size_t matrixSize = (size_t)N_SIZE * N_SIZE * sizeof(uint16_t);
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
@@ -169,7 +173,7 @@ int main() {
     uint16_t *dataA, *dataB;
     vkMapMemory(device, memoryA, 0, matrixSize, 0, (void**)&dataA);
     vkMapMemory(device, memoryB, 0, matrixSize, 0, (void**)&dataB);
-    for (int i = 0; i < N_SIZE * N_SIZE; i++) {
+    for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
         dataA[i] = float32_to_float16(1.0f);
         dataB[i] = float32_to_float16(2.0f);
     }
@@ -221,10 +225,15 @@ int main() {
     vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
 
     FILE* f = fopen("matmul.spv", "rb");
+    if (!f) {
+        fprintf(stderr, "Error: Could not open matmul.spv. Make sure it is in the current directory.\n");
+        return 1;
+    }
     fseek(f, 0, SEEK_END);
     long length = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint32_t* code = malloc(length);
+    if (!code) { fprintf(stderr, "Failed to allocate memory for shader code\n"); return 1; }
     fread(code, 1, length, f);
     fclose(f);
 
@@ -287,7 +296,7 @@ int main() {
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
     PushConstants pc = {N_SIZE, N_SIZE, N_SIZE};
     vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-    vkCmdDispatch(commandBuffer, N_SIZE / WORKGROUP_SIZE, N_SIZE / WORKGROUP_SIZE, 1);
+    vkCmdDispatch(commandBuffer, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
     vkEndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo = {
