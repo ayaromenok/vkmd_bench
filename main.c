@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 #include "args.h"
 
+//it's not a WG size from GPU
 #define WORKGROUP_SIZE 16
 
 double get_time_sec() {
@@ -61,7 +62,11 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
         .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
-    vkCreateBuffer(device, &bufferInfo, NULL, buffer);
+    VkResult resBuf = vkCreateBuffer(device, &bufferInfo, NULL, buffer);
+    if (resBuf != VK_SUCCESS) {
+        fprintf(stderr, "Failed to create buffer (res: %d)\n", resBuf);
+        exit(1);
+    }
 
     VkMemoryRequirements memReqs;
     vkGetBufferMemoryRequirements(device, *buffer, &memReqs);
@@ -70,20 +75,57 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
 
     uint32_t memoryTypeIndex = (uint32_t)-1;
+    VkResult resAlloc = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+    // First try to find and allocate a memory type that is HOST_VISIBLE, HOST_COHERENT, and DEVICE_LOCAL
     for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-        if ((memReqs.memoryTypeBits & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))) {
-            memoryTypeIndex = i;
-            break;
+        if ((memReqs.memoryTypeBits & (1 << i)) && 
+            (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)) {
+            
+            VkMemoryAllocateInfo allocInfo = {
+                .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                .allocationSize = memReqs.size,
+                .memoryTypeIndex = i,
+            };
+            resAlloc = vkAllocateMemory(device, &allocInfo, NULL, memory);
+            if (resAlloc == VK_SUCCESS) {
+                memoryTypeIndex = i;
+                break;
+            }
         }
     }
 
-    VkMemoryAllocateInfo allocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = memReqs.size,
-        .memoryTypeIndex = memoryTypeIndex,
-    };
-    vkAllocateMemory(device, &allocInfo, NULL, memory);
+    // If not found or failed, fallback to HOST_VISIBLE and HOST_COHERENT
+    if (resAlloc != VK_SUCCESS) {
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+            if ((memReqs.memoryTypeBits & (1 << i)) && 
+                (memProps.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+                
+                VkMemoryAllocateInfo allocInfo = {
+                    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    .allocationSize = memReqs.size,
+                    .memoryTypeIndex = i,
+                };
+                resAlloc = vkAllocateMemory(device, &allocInfo, NULL, memory);
+                if (resAlloc == VK_SUCCESS) {
+                    memoryTypeIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (resAlloc != VK_SUCCESS) {
+        fprintf(stderr, "Failed to allocate memory (res: %d)\n", resAlloc);
+        exit(1);
+    }
     vkBindBufferMemory(device, *buffer, *memory, 0);
+
+    if (memProps.memoryTypes[memoryTypeIndex].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+        printf("Buffer allocated in DEVICE LOCAL memory (size: %zu MB)\n", size/1024/1024);
+    } else {
+        printf("Buffer allocated in HOST memory (NOT device local) (size: %zu MB)\n", size/1024/1024);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -150,7 +192,19 @@ int main(int argc, char** argv) {
     VkPhysicalDeviceProperties deviceProps;
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProps);
     printf("Using device [%u]: %s\n", args.device_index, deviceProps.deviceName);
+
+    VkPhysicalDeviceMemoryProperties deviceMemProps;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemProps);
+    size_t totalDeviceLocalMemory = 0;
+    for (uint32_t i = 0; i < deviceMemProps.memoryHeapCount; i++) {
+        if (deviceMemProps.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+            totalDeviceLocalMemory += deviceMemProps.memoryHeaps[i].size;
+        }
+    }
+    printf("Maximum device local memory: %zu MB\n", totalDeviceLocalMemory / 1024 / 1024);
+
     printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
+    fflush(stdout);
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
@@ -205,7 +259,11 @@ int main(int argc, char** argv) {
     };
 
     VkDevice device;
-    vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device);
+    VkResult devRes = vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device);
+    if (devRes != VK_SUCCESS) {
+        fprintf(stderr, "Failed to create Vulkan device (res: %d)\n", devRes);
+        exit(1);
+    }
 
     VkQueue queue;
     vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
@@ -214,13 +272,27 @@ int main(int argc, char** argv) {
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
+    printf("Creating buffer A...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, &bufferA, &memoryA);
+    printf("Creating buffer B...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, &bufferB, &memoryB);
+    printf("Creating buffer C...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, &bufferC, &memoryC);
 
-    void *dataA_mapped, *dataB_mapped;
-    vkMapMemory(device, memoryA, 0, matrixSize, 0, &dataA_mapped);
-    vkMapMemory(device, memoryB, 0, matrixSize, 0, &dataB_mapped);
+    printf("Mapping memory...\n"); fflush(stdout);
+    void *dataA_mapped = NULL, *dataB_mapped = NULL;
+    VkResult resA = vkMapMemory(device, memoryA, 0, matrixSize, 0, &dataA_mapped);
+    VkResult resB = vkMapMemory(device, memoryB, 0, matrixSize, 0, &dataB_mapped);
+    
+    if (resA != VK_SUCCESS || dataA_mapped == NULL) {
+        fprintf(stderr, "Failed to map memory A (res: %d)\n", resA);
+        exit(1);
+    }
+    if (resB != VK_SUCCESS || dataB_mapped == NULL) {
+        fprintf(stderr, "Failed to map memory B (res: %d)\n", resB);
+        exit(1);
+    }
+
     if (args.data_type == DT_FP16) {
         uint16_t* hA = (uint16_t*)dataA_mapped;
         uint16_t* hB = (uint16_t*)dataB_mapped;
