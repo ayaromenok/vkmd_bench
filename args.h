@@ -5,6 +5,7 @@
 
 typedef struct {
     uint32_t matrix_size;
+    uint32_t iterations;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);

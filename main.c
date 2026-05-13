@@ -2,10 +2,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include <vulkan/vulkan.h>
 #include "args.h"
 
 #define WORKGROUP_SIZE 16
+
+double get_time_sec() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
 
 // Simple float32 to float16 conversion (IEEE 754)
 uint16_t float32_to_float16(float f) {
@@ -299,13 +306,32 @@ int main(int argc, char** argv) {
     vkCmdDispatch(commandBuffer, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (N_SIZE + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
     vkEndCommandBuffer(commandBuffer);
 
+    printf("Iterations: %u\n", args.iterations);
+
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &commandBuffer,
     };
+
+    // Warm-up
     vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
+
+    double start_time = get_time_sec();
+    for (uint32_t i = 0; i < args.iterations; i++) {
+        vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(queue); // Simple sync for benchmarking
+    }
+    double end_time = get_time_sec();
+    double total_time = end_time - start_time;
+    double avg_time = total_time / args.iterations;
+
+    double gflops = (2.0 * N_SIZE * N_SIZE * N_SIZE) / (avg_time * 1e9);
+
+    printf("Total time: %.3f s\n", total_time);
+    printf("Avg time per iteration: %.3f ms\n", avg_time * 1000.0);
+    printf("Performance: %.3f GFLOPS\n", gflops);
 
     uint16_t* dataC;
     vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);

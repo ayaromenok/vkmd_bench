@@ -4,7 +4,7 @@
 #include <string.h>
 
 AppArgs parse_args(int argc, char** argv) {
-    AppArgs args = { .matrix_size = 1024 }; // Default
+    AppArgs args = { .matrix_size = 1024, .iterations = 10 }; // Default
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-ms") == 0 || strcmp(argv[i], "--matrix-size") == 0) {
             if (i + 1 < argc) {
@@ -13,8 +13,15 @@ AppArgs parse_args(int argc, char** argv) {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
             }
+        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--iterations") == 0) {
+            if (i + 1 < argc) {
+                args.iterations = atoi(argv[++i]);
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            printf("Usage: %s [-ms | --matrix-size <size>]\n", argv[0]);
+            printf("Usage: %s [-ms | --matrix-size <size>] [-i | --iterations <count>]\n", argv[0]);
             exit(0);
         }
     }
