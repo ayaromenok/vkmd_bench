@@ -103,6 +103,17 @@ int main(int argc, char** argv) {
         .pApplicationInfo = &appInfo,
     };
 
+    const char* type_str = "FP16";
+    const char* perf_label = "GFLOPS";
+    size_t elementSize = 2;
+    const char* shaderFile = "matmul_fp16.spv";
+    switch(args.data_type) {
+        case DT_FP16: type_str = "FP16"; perf_label = "GFLOPS"; elementSize = 2; shaderFile = "matmul_fp16.spv"; break;
+        case DT_INT16: type_str = "INT16"; perf_label = "GOPS"; elementSize = 2; shaderFile = "matmul_int16.spv"; break;
+        case DT_FP32: type_str = "FP32"; perf_label = "GFLOPS"; elementSize = 4; shaderFile = "matmul_fp32.spv"; break;
+        case DT_INT32: type_str = "INT32"; perf_label = "GOPS"; elementSize = 4; shaderFile = "matmul_int32.spv"; break;
+    }
+
     VkInstance instance;
     vkCreateInstance(&createInfo, NULL, &instance);
 
@@ -199,7 +210,7 @@ int main(int argc, char** argv) {
     VkQueue queue;
     vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
 
-    size_t matrixSize = (size_t)N_SIZE * N_SIZE * sizeof(uint16_t);
+    size_t matrixSize = (size_t)N_SIZE * N_SIZE * elementSize;
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
@@ -207,17 +218,33 @@ int main(int argc, char** argv) {
     createBuffer(device, physicalDevice, matrixSize, &bufferB, &memoryB);
     createBuffer(device, physicalDevice, matrixSize, &bufferC, &memoryC);
 
-    uint16_t *dataA, *dataB;
-    vkMapMemory(device, memoryA, 0, matrixSize, 0, (void**)&dataA);
-    vkMapMemory(device, memoryB, 0, matrixSize, 0, (void**)&dataB);
+    void *dataA_mapped, *dataB_mapped;
+    vkMapMemory(device, memoryA, 0, matrixSize, 0, &dataA_mapped);
+    vkMapMemory(device, memoryB, 0, matrixSize, 0, &dataB_mapped);
     if (args.data_type == DT_FP16) {
+        uint16_t* hA = (uint16_t*)dataA_mapped;
+        uint16_t* hB = (uint16_t*)dataB_mapped;
         for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
-            dataA[i] = float32_to_float16(1.0f);
-            dataB[i] = float32_to_float16(2.0f);
+            hA[i] = float32_to_float16(1.0f);
+            hB[i] = float32_to_float16(2.0f);
         }
-    } else {
-        int16_t* iA = (int16_t*)dataA;
-        int16_t* iB = (int16_t*)dataB;
+    } else if (args.data_type == DT_INT16) {
+        int16_t* iA = (int16_t*)dataA_mapped;
+        int16_t* iB = (int16_t*)dataB_mapped;
+        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+            iA[i] = 1;
+            iB[i] = 2;
+        }
+    } else if (args.data_type == DT_FP32) {
+        float* fA = (float*)dataA_mapped;
+        float* fB = (float*)dataB_mapped;
+        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+            fA[i] = 1.0f;
+            fB[i] = 2.0f;
+        }
+    } else if (args.data_type == DT_INT32) {
+        int32_t* iA = (int32_t*)dataA_mapped;
+        int32_t* iB = (int32_t*)dataB_mapped;
         for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
             iA[i] = 1;
             iB[i] = 2;
@@ -226,7 +253,6 @@ int main(int argc, char** argv) {
     vkUnmapMemory(device, memoryA);
     vkUnmapMemory(device, memoryB);
 
-    const char* shaderFile = (args.data_type == DT_FP16) ? "matmul_fp16.spv" : "matmul_int16.spv";
     FILE* f = fopen(shaderFile, "rb");
     if (!f) { fprintf(stderr, "Error: Could not open %s. Make sure it is in the current directory.\n", shaderFile); return 1; }
     fseek(f, 0, SEEK_END);
@@ -335,8 +361,6 @@ int main(int argc, char** argv) {
     VkCommandBuffer commandBuffer;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
 
-    const char* type_str = (args.data_type == DT_FP16) ? "FP16" : "INT16";
-    const char* perf_label = (args.data_type == DT_FP16) ? "GFLOPS" : "GOPS";
 
     FILE* csv_file = NULL;
     if (args.save_csv) {
@@ -419,13 +443,22 @@ int main(int argc, char** argv) {
     printf("\n");
     if (csv_file) fclose(csv_file);
 
-    uint16_t* dataC;
-    vkMapMemory(device, memoryC, 0, matrixSize, 0, (void**)&dataC);
+    void* dataC_mapped;
+    vkMapMemory(device, memoryC, 0, matrixSize, 0, &dataC_mapped);
     if (args.data_type == DT_FP16) {
-        printf("Result [0,0]: %f\n", float16_to_float32(dataC[0]));
+        uint16_t* hC = (uint16_t*)dataC_mapped;
+        printf("Result [0,0]: %f\n", float16_to_float32(hC[0]));
         printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
-    } else {
-        int16_t* iC = (int16_t*)dataC;
+    } else if (args.data_type == DT_INT16) {
+        int16_t* iC = (int16_t*)dataC_mapped;
+        printf("Result [0,0]: %d\n", (int)iC[0]);
+        printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
+    } else if (args.data_type == DT_FP32) {
+        float* fC = (float*)dataC_mapped;
+        printf("Result [0,0]: %f\n", fC[0]);
+        printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+    } else if (args.data_type == DT_INT32) {
+        int32_t* iC = (int32_t*)dataC_mapped;
         printf("Result [0,0]: %d\n", (int)iC[0]);
         printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
     }

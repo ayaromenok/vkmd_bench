@@ -39,8 +39,10 @@ AppArgs parse_args(int argc, char** argv) {
                 char* dt = argv[++i];
                 if (strcmp(dt, "fp16") == 0) args.data_type = DT_FP16;
                 else if (strcmp(dt, "int16") == 0) args.data_type = DT_INT16;
+                else if (strcmp(dt, "fp32") == 0) args.data_type = DT_FP32;
+                else if (strcmp(dt, "int32") == 0) args.data_type = DT_INT32;
                 else {
-                    fprintf(stderr, "Error: Unknown data type %s (use fp16 or int16)\n", dt);
+                    fprintf(stderr, "Error: Unknown data type %s (use fp16, int16, fp32, or int32)\n", dt);
                     exit(1);
                 }
             } else {
@@ -57,7 +59,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -ms, --matrix-size <size>   Set matrix size (default: 1024)\n");
             printf("  -i, --iterations <count>    Set benchmarking iterations (default: 10)\n");
             printf("  -d, --device <index>        Select Vulkan device index (default: 0)\n");
-            printf("  -dt, --data-type <type>     Select data type: fp16, int16 (default: fp16)\n");
+            printf("  -dt, --data-type <type>     Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
             printf("  -dl, --device-list          List available Vulkan devices and exit\n");
             printf("  -csv, --save-csv            Save results to CSV file\n");
             printf("  -h, --help                  Show this help message\n");
