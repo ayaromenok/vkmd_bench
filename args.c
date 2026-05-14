@@ -12,7 +12,8 @@ AppArgs parse_args(int argc, char** argv) {
         .device_index = 0, 
         .list_devices = 0, 
         .save_csv = 0,
-        .data_type = DT_FP16 
+        .data_type = DT_FP16,
+        .operator_type = OP_MUL
     };
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-ms") == 0 || strcmp(argv[i], "--matrix-size") == 0) {
@@ -67,20 +68,37 @@ AppArgs parse_args(int argc, char** argv) {
             }
         } else if (strcmp(argv[i], "-dl") == 0 || strcmp(argv[i], "--device-list") == 0) {
             args.list_devices = 1;
+        } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--operator") == 0) {
+            if (i + 1 < argc) {
+                char* op = argv[++i];
+                if (strcmp(op, "mul") == 0) args.operator_type = OP_MUL;
+                else if (strcmp(op, "add") == 0) args.operator_type = OP_ADD;
+                else if (strcmp(op, "sub") == 0) args.operator_type = OP_SUB;
+                else if (strcmp(op, "div") == 0) args.operator_type = OP_DIV;
+                else if (strcmp(op, "mad") == 0) args.operator_type = OP_MAD;
+                else {
+                    fprintf(stderr, "Error: Unknown operator '%s' (use mul, add, sub, div, or mad)\n", op);
+                    exit(1);
+                }
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
         } else if (strcmp(argv[i], "-csv") == 0 || strcmp(argv[i], "--save-csv") == 0) {
             args.save_csv = 1;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
-            printf("  -m, --matrix-size <size>        Set max matrix size (default: 1024)\n");
-            printf("  -mss, --matrix-start-size <sz>  Set start matrix size (default: 32)\n");
-            printf("  -ms, --matrix-step <step>       Set matrix step (default: 32)\n");
-            printf("  -i, --iterations <count>        Set benchmarking iterations (default: 10)\n");
-            printf("  -d, --device <index>            Select Vulkan device index (default: 0)\n");
-            printf("  -dt, --data-type <type>         Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
-            printf("  -dl, --device-list              List available Vulkan devices and exit\n");
-            printf("  -csv, --save-csv                Save results to CSV file\n");
-            printf("  -h, --help                      Show this help message\n");
+            printf("  -ms, --matrix-size <size>              Set max matrix size (default: 1024)\n");
+            printf("  -mss, --matrix-start-size <sz>         Set start matrix size (default: 32)\n");
+            printf("  -mis, --matrix-increment-step <step>   Set matrix incrementstep (default: 32)\n");
+            printf("  -i, --iterations <count>               Set benchmarking iterations (default: 10)\n");
+            printf("  -d, --device <index>                   Select Vulkan device index (default: 0)\n");
+            printf("  -dt, --data-type <type>                Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
+            printf("  -dl, --device-list                     List available Vulkan devices and exit\n");
+            printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad (default: mul)\n");
+            printf("  -csv, --save-csv                       Save results to CSV file\n");
+            printf("  -h, --help                             Show this help message\n");
             exit(0);
         }
     }

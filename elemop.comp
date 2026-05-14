@@ -1,0 +1,53 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
+
+layout(local_size_x = 256) in;
+
+#ifndef DATA_TYPE
+#define DATA_TYPE float16_t
+#endif
+
+// OP_TYPE: 0=add, 1=sub, 2=div, 3=mad
+#ifndef OP_TYPE
+#define OP_TYPE 0
+#endif
+
+layout(set = 0, binding = 0) buffer MatrixA {
+    DATA_TYPE data[];
+} a;
+
+layout(set = 0, binding = 1) buffer MatrixB {
+    DATA_TYPE data[];
+} b;
+
+layout(set = 0, binding = 2) buffer MatrixC {
+    DATA_TYPE data[];
+} c;
+
+layout(push_constant) uniform PushConstants {
+    uint M;
+    uint N;
+    uint K;  // unused for element-wise, kept for compatibility
+} pc;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    uint total = pc.M * pc.N;
+
+    if (idx >= total) return;
+
+#if OP_TYPE == 0
+    // Addition: C = A + B
+    c.data[idx] = a.data[idx] + b.data[idx];
+#elif OP_TYPE == 1
+    // Subtraction: C = A - B
+    c.data[idx] = a.data[idx] - b.data[idx];
+#elif OP_TYPE == 2
+    // Division: C = A / B
+    c.data[idx] = a.data[idx] / b.data[idx];
+#elif OP_TYPE == 3
+    // MAD: C = A * B + A  (multiply and add)
+    c.data[idx] = a.data[idx] * b.data[idx] + a.data[idx];
+#endif
+}

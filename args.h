@@ -10,6 +10,14 @@ typedef enum {
     DT_INT32
 } DataType;
 
+typedef enum {
+    OP_MUL,
+    OP_ADD,
+    OP_SUB,
+    OP_DIV,
+    OP_MAD
+} OperatorType;
+
 typedef struct {
     uint32_t matrix_size;
     uint32_t matrix_start_size;
@@ -19,6 +27,7 @@ typedef struct {
     int list_devices;
     int save_csv;
     DataType data_type;
+    OperatorType operator_type;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);

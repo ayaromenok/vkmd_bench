@@ -9,6 +9,7 @@
 
 //it's not a WG size from GPU
 #define WORKGROUP_SIZE 16
+#define ELEMOP_WORKGROUP_SIZE 256
 
 double get_time_sec() {
     struct timespec ts;
@@ -131,11 +132,33 @@ int main(int argc, char** argv) {
     size_t elementSize = 2;
     const char* shaderFile = "matmul_fp16.spv";
     switch(args.data_type) {
-        case DT_FP16: type_str = "FP16"; perf_label = "GFLOPS"; elementSize = 2; shaderFile = "matmul_fp16.spv"; break;
-        case DT_INT16: type_str = "INT16"; perf_label = "GOPS"; elementSize = 2; shaderFile = "matmul_int16.spv"; break;
-        case DT_FP32: type_str = "FP32"; perf_label = "GFLOPS"; elementSize = 4; shaderFile = "matmul_fp32.spv"; break;
-        case DT_INT32: type_str = "INT32"; perf_label = "GOPS"; elementSize = 4; shaderFile = "matmul_int32.spv"; break;
+        case DT_FP16: type_str = "FP16"; perf_label = "GFLOPS"; elementSize = 2; break;
+        case DT_INT16: type_str = "INT16"; perf_label = "GOPS"; elementSize = 2; break;
+        case DT_FP32: type_str = "FP32"; perf_label = "GFLOPS"; elementSize = 4; break;
+        case DT_INT32: type_str = "INT32"; perf_label = "GOPS"; elementSize = 4; break;
     }
+
+    const char* op_str = "MUL";
+    int is_elemop = 0;  // 0 = matmul (2D dispatch), 1 = element-wise (1D dispatch)
+    switch(args.operator_type) {
+        case OP_MUL: op_str = "MUL"; is_elemop = 0; break;
+        case OP_ADD: op_str = "ADD"; is_elemop = 1; break;
+        case OP_SUB: op_str = "SUB"; is_elemop = 1; break;
+        case OP_DIV: op_str = "DIV"; is_elemop = 1; break;
+        case OP_MAD: op_str = "MAD"; is_elemop = 1; break;
+    }
+
+    // Select shader file based on operator + data type
+    char shaderFileBuf[64];
+    if (is_elemop) {
+        const char* op_names[] = {"mul", "add", "sub", "div", "mad"};
+        const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
+    } else {
+        const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "matmul_%s.spv", dt_names[args.data_type]);
+    }
+    shaderFile = shaderFileBuf;
 
     VkInstance instance;
     vkCreateInstance(&createInfo, NULL, &instance);
@@ -459,7 +482,7 @@ int main(int argc, char** argv) {
     vkQueueSubmit(queue, 1, &copySubmitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
 
-    printf("Benchmarking %s from %ux%u to %ux%u with step %u...\n\n", type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
+    printf("Benchmarking %s %s from %ux%u to %ux%u with step %u...\n\n", op_str, type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
     printf("| Matrix Size | Perf, %s |\n", perf_label);
     printf("|-------------|--------------|\n");
 
@@ -478,7 +501,12 @@ int main(int argc, char** argv) {
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
         PushConstants pc = {current_n, current_n, current_n};
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-        vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
+        if (is_elemop) {
+            uint32_t total_elements = current_n * current_n;
+            vkCmdDispatch(commandBuffer, (total_elements + ELEMOP_WORKGROUP_SIZE - 1) / ELEMOP_WORKGROUP_SIZE, 1, 1);
+        } else {
+            vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
+        }
         vkEndCommandBuffer(commandBuffer);
 
         // Warm-up
@@ -496,7 +524,15 @@ int main(int argc, char** argv) {
         double end_time = get_time_sec();
         double total_time = end_time - start_time;
         double avg_time = total_time / count;
-        double gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+        double gops;
+        if (is_elemop) {
+            // Element-wise: N*N operations (MAD counts as 2 ops)
+            double ops_per_element = (args.operator_type == OP_MAD) ? 2.0 : 1.0;
+            gops = (ops_per_element * (double)current_n * current_n) / (avg_time * 1e9);
+        } else {
+            // MatMul: 2*N^3 operations
+            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+        }
 
         printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
         fflush(stdout);
@@ -532,22 +568,35 @@ int main(int argc, char** argv) {
 
     void* dataC_mapped;
     vkMapMemory(device, stagingMemoryC, 0, matrixSize, 0, &dataC_mapped);
+
+    // Compute expected values based on operator
+    // A values = 1.0, B values = 2.0
+    float expected_fp;
+    int expected_int;
+    switch(args.operator_type) {
+        case OP_MUL: expected_fp = (float)N_SIZE * 1.0f * 2.0f; expected_int = (int)N_SIZE * 1 * 2; break;
+        case OP_ADD: expected_fp = 1.0f + 2.0f; expected_int = 1 + 2; break;
+        case OP_SUB: expected_fp = 1.0f - 2.0f; expected_int = 1 - 2; break;
+        case OP_DIV: expected_fp = 1.0f / 2.0f; expected_int = 1 / 2; break;
+        case OP_MAD: expected_fp = 1.0f * 2.0f + 1.0f; expected_int = 1 * 2 + 1; break;
+    }
+
     if (args.data_type == DT_FP16) {
         uint16_t* hC = (uint16_t*)dataC_mapped;
         printf("Result [0,0]: %f\n", float16_to_float32(hC[0]));
-        printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+        printf("Expected [0,0]: %f\n", expected_fp);
     } else if (args.data_type == DT_INT16) {
         int16_t* iC = (int16_t*)dataC_mapped;
         printf("Result [0,0]: %d\n", (int)iC[0]);
-        printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
+        printf("Expected [0,0]: %d\n", expected_int);
     } else if (args.data_type == DT_FP32) {
         float* fC = (float*)dataC_mapped;
         printf("Result [0,0]: %f\n", fC[0]);
-        printf("Expected [0,0]: %f\n", (float)N_SIZE * 1.0f * 2.0f);
+        printf("Expected [0,0]: %f\n", expected_fp);
     } else if (args.data_type == DT_INT32) {
         int32_t* iC = (int32_t*)dataC_mapped;
         printf("Result [0,0]: %d\n", (int)iC[0]);
-        printf("Expected [0,0]: %d\n", (int)N_SIZE * 1 * 2);
+        printf("Expected [0,0]: %d\n", expected_int);
     }
     vkUnmapMemory(device, stagingMemoryC);
 
