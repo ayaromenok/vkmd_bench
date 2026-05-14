@@ -513,10 +513,10 @@ int main(int argc, char** argv) {
         vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(queue);
 
-        // Run for approximately 5 seconds
+        // Run for approximately 1 seconds
         uint32_t count = 0;
         double start_time = get_time_sec();
-        while (get_time_sec() - start_time < 5.0) {
+        while (get_time_sec() - start_time < 1.0) {
             vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
             vkQueueWaitIdle(queue);
             count++;
@@ -547,7 +547,7 @@ int main(int argc, char** argv) {
         if (next_n > N_SIZE) next_n = N_SIZE;
         current_n = next_n;
         
-        sleep(5);
+        sleep(1);
     }
     printf("\n");
     if (csv_file) fclose(csv_file);
