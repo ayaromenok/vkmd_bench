@@ -107,7 +107,7 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
     } else if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
         memTypeStr = "HOST VISIBLE";
     }
-    printf("Buffer allocated in %s memory (size: %zu MB)\n", memTypeStr, size/1024/1024);
+    //printf("Buffer allocated in %s memory (size: %zu MB)\n", memTypeStr, size/1024/1024);
 }
 
 int main(int argc, char** argv) {
@@ -205,10 +205,10 @@ int main(int argc, char** argv) {
             totalDeviceLocalMemory += deviceMemProps.memoryHeaps[i].size;
         }
     }
-    printf("Maximum device local memory: %zu MB\n", totalDeviceLocalMemory / 1024 / 1024);
+    //printf("Maximum device local memory: %zu MB\n", totalDeviceLocalMemory / 1024 / 1024);
 
-    printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
-    fflush(stdout);
+    //printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
+    //fflush(stdout);
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
@@ -276,19 +276,19 @@ int main(int argc, char** argv) {
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
-    printf("Creating device buffers...\n"); fflush(stdout);
+    //printf("Creating device buffers...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferA, &memoryA);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferB, &memoryB);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferC, &memoryC);
 
     VkBuffer stagingA, stagingB, stagingC;
     VkDeviceMemory stagingMemoryA, stagingMemoryB, stagingMemoryC;
-    printf("Creating staging buffers...\n"); fflush(stdout);
+    //printf("Creating staging buffers...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingA, &stagingMemoryA);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingB, &stagingMemoryB);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingC, &stagingMemoryC);
 
-    printf("Mapping staging memory...\n"); fflush(stdout);
+    //printf("Mapping staging memory...\n"); fflush(stdout);
     void *dataA_mapped = NULL, *dataB_mapped = NULL;
     VkResult resA = vkMapMemory(device, stagingMemoryA, 0, matrixSize, 0, &dataA_mapped);
     VkResult resB = vkMapMemory(device, stagingMemoryB, 0, matrixSize, 0, &dataB_mapped);
@@ -580,7 +580,7 @@ int main(int argc, char** argv) {
         case OP_DIV: expected_fp = 1.0f / 2.0f; expected_int = 1 / 2; break;
         case OP_MAD: expected_fp = 1.0f * 2.0f + 1.0f; expected_int = 1 * 2 + 1; break;
     }
-
+/*
     if (args.data_type == DT_FP16) {
         uint16_t* hC = (uint16_t*)dataC_mapped;
         printf("Result [0,0]: %f\n", float16_to_float32(hC[0]));
@@ -598,6 +598,7 @@ int main(int argc, char** argv) {
         printf("Result [0,0]: %d\n", (int)iC[0]);
         printf("Expected [0,0]: %d\n", expected_int);
     }
+*/
     vkUnmapMemory(device, stagingMemoryC);
 
     return 0;
