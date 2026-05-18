@@ -52,6 +52,31 @@ static void parse_profiles(AppArgs* args, const char* str) {
     }
 }
 
+static void parse_operators(AppArgs* args, const char* str) {
+    args->multi_operator_count = 0;
+    char* val_copy = strdup(str);
+    char* token = strtok(val_copy, ",");
+    while (token && args->multi_operator_count < 32) {
+        char* trimmed = trim(token);
+        OperatorType op = OP_MUL;
+        if (strcmp(trimmed, "mul") == 0) op = OP_MUL;
+        else if (strcmp(trimmed, "add") == 0) op = OP_ADD;
+        else if (strcmp(trimmed, "sub") == 0) op = OP_SUB;
+        else if (strcmp(trimmed, "div") == 0) op = OP_DIV;
+        else if (strcmp(trimmed, "mad") == 0) op = OP_MAD;
+        else {
+            fprintf(stderr, "Error: Unknown operator '%s' (use mul, add, sub, div, or mad)\n", trimmed);
+            exit(1);
+        }
+        args->multi_operators[args->multi_operator_count++] = op;
+        token = strtok(NULL, ",");
+    }
+    free(val_copy);
+    if (args->multi_operator_count > 0) {
+        args->operator_type = args->multi_operators[0];
+    }
+}
+
 static void load_from_ini(AppArgs* args, const char* filepath) {
     FILE* file = fopen(filepath, "r");
     if (!file) {
@@ -91,11 +116,7 @@ static void load_from_ini(AppArgs* args, const char* filepath) {
         } else if (strcmp(key, "device-list") == 0 || strcmp(key, "device_list") == 0 || strcmp(key, "dl") == 0) {
             args->list_devices = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
         } else if (strcmp(key, "operator") == 0 || strcmp(key, "o") == 0) {
-            if (strcmp(val, "mul") == 0) args->operator_type = OP_MUL;
-            else if (strcmp(val, "add") == 0) args->operator_type = OP_ADD;
-            else if (strcmp(val, "sub") == 0) args->operator_type = OP_SUB;
-            else if (strcmp(val, "div") == 0) args->operator_type = OP_DIV;
-            else if (strcmp(val, "mad") == 0) args->operator_type = OP_MAD;
+            parse_operators(args, val);
         } else if (strcmp(key, "save-csv") == 0 || strcmp(key, "save_csv") == 0 || strcmp(key, "csv") == 0) {
             args->save_csv = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
         } else if (strcmp(key, "multi-bench") == 0 || strcmp(key, "multi_bench") == 0 || strcmp(key, "mb") == 0) {
@@ -119,7 +140,8 @@ AppArgs parse_args(int argc, char** argv) {
         .multi_bench = 0,
         .lact_profile = "210_405",
         .data_type = DT_FP16,
-        .operator_type = OP_MUL
+        .operator_type = OP_MUL,
+        .multi_operator_count = 0
     };
     
     // Load options from settings.ini if present, which can then be overridden by cmd line args
@@ -180,16 +202,7 @@ AppArgs parse_args(int argc, char** argv) {
             args.list_devices = 1;
         } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--operator") == 0) {
             if (i + 1 < argc) {
-                char* op = argv[++i];
-                if (strcmp(op, "mul") == 0) args.operator_type = OP_MUL;
-                else if (strcmp(op, "add") == 0) args.operator_type = OP_ADD;
-                else if (strcmp(op, "sub") == 0) args.operator_type = OP_SUB;
-                else if (strcmp(op, "div") == 0) args.operator_type = OP_DIV;
-                else if (strcmp(op, "mad") == 0) args.operator_type = OP_MAD;
-                else {
-                    fprintf(stderr, "Error: Unknown operator '%s' (use mul, add, sub, div, or mad)\n", op);
-                    exit(1);
-                }
+                parse_operators(&args, argv[++i]);
             } else {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
@@ -235,6 +248,11 @@ AppArgs parse_args(int argc, char** argv) {
         args.multi_profile_count = 2;
         args.multi_profiles[0] = strdup("0_210_405");
         args.multi_profiles[1] = strdup("2_210_405");
+    }
+
+    if (args.multi_operator_count == 0) {
+        args.multi_operator_count = 1;
+        args.multi_operators[0] = args.operator_type;
     }
 
     return args;

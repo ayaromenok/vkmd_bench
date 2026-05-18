@@ -37,6 +37,8 @@ typedef struct {
     
     DataType data_type;
     OperatorType operator_type;
+    OperatorType multi_operators[32];
+    uint32_t multi_operator_count;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);
