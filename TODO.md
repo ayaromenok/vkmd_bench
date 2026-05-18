@@ -4,3 +4,6 @@ reorganize file structure:
  - move compiled GLSL/SPV to (build)/shaders subflder
  - move resulted CSV somewhere
  - separate ini file to settins.ini and banchmark.ini
+ - merge 'matmul.comp' and 'elemop.comp'
+
+find more suitable name for project
