@@ -113,6 +113,8 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -l, --lact <profile>                   Set LACT profile name string (default: 210_405)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
+        } else {
+            fprintf(stderr, "Warning: Unrecognized command-line parameter '%s'\n", argv[i]);
         }
     }
     return args;
