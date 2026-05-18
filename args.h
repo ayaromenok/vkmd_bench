@@ -28,6 +28,13 @@ typedef struct {
     int save_csv;
     int multi_bench;
     const char* lact_profile;
+    
+    // Multi-device select fields
+    uint32_t multi_devices[32];
+    uint32_t multi_device_count;
+    const char* multi_profiles[32];
+    uint32_t multi_profile_count;
+    
     DataType data_type;
     OperatorType operator_type;
 } AppArgs;

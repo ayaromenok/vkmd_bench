@@ -17,6 +17,28 @@ double get_time_sec() {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
+static void get_device_name(uint32_t device_index, char* out_name, size_t max_len) {
+    snprintf(out_name, max_len, "Device %u", device_index);
+    VkInstanceCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+    };
+    VkInstance instance;
+    if (vkCreateInstance(&createInfo, NULL, &instance) == VK_SUCCESS) {
+        uint32_t count = 0;
+        vkEnumeratePhysicalDevices(instance, &count, NULL);
+        if (count > device_index) {
+            VkPhysicalDevice* devices = malloc(sizeof(VkPhysicalDevice) * count);
+            if (vkEnumeratePhysicalDevices(instance, &count, devices) == VK_SUCCESS) {
+                VkPhysicalDeviceProperties props;
+                vkGetPhysicalDeviceProperties(devices[device_index], &props);
+                snprintf(out_name, max_len, "%s", props.deviceName);
+            }
+            free(devices);
+        }
+        vkDestroyInstance(instance, NULL);
+    }
+}
+
 // Simple float32 to float16 conversion (IEEE 754)
 uint16_t float32_to_float16(float f) {
     uint32_t i = *(uint32_t*)&f;
@@ -647,48 +669,50 @@ int main(int argc, char** argv) {
     // Multi Benchmarking Mode
     printf("--- Starting Multi Device Benchmarking ---\n");
     
-    char cmd0[256];
-    snprintf(cmd0, sizeof(cmd0), "lact cli -g 0 profile set \"0_%s\"", args.lact_profile);
-    printf("Configuring Device 0 (RTX A4000) profile: \"0_%s\"\n", args.lact_profile);
-    fflush(stdout);
-    int sys_res = system(cmd0);
-    if (sys_res != 0) {
-        fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
-    }
-    
-    uint32_t count0 = 0;
-    printf("Running benchmarks on Device 0...\n");
-    fflush(stdout);
-    double* results0 = run_benchmark_on_device(args, 0, 1, &count0);
-    if (!results0) {
-        fprintf(stderr, "Error: Failed to run benchmarks on Device 0\n");
-        return 1;
-    }
+    double* results[32] = {NULL};
+    uint32_t counts[32] = {0};
+    char device_names[32][256];
 
-    char cmd2[256];
-    snprintf(cmd2, sizeof(cmd2), "lact cli -g 2 profile set \"2_%s\"", args.lact_profile);
-    printf("\nConfiguring Device 2 (CMP 70HX) profile: \"2_%s\"\n", args.lact_profile);
-    fflush(stdout);
-    sys_res = system(cmd2);
-    if (sys_res != 0) {
-        fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
-    }
+    for (uint32_t d = 0; d < args.multi_device_count; d++) {
+        uint32_t dev_idx = args.multi_devices[d];
+        const char* profile = (d < args.multi_profile_count) ? args.multi_profiles[d] : "default";
+        get_device_name(dev_idx, device_names[d], sizeof(device_names[d]));
 
-    uint32_t count2 = 0;
-    printf("Running benchmarks on Device 2...\n");
-    fflush(stdout);
-    double* results2 = run_benchmark_on_device(args, 2, 1, &count2);
-    if (!results2) {
-        fprintf(stderr, "Error: Failed to run benchmarks on Device 2\n");
-        free(results0);
-        return 1;
-    }
+        if (d > 0) printf("\n");
 
-    if (count0 != count2) {
-        fprintf(stderr, "Error: Mismatched result sizes between devices (%u vs %u)\n", count0, count2);
-        free(results0);
-        free(results2);
-        return 1;
+        if (strcmp(profile, "default") != 0) {
+            char cmd[256];
+            snprintf(cmd, sizeof(cmd), "lact cli -g %u profile set \"%s\"", dev_idx, profile);
+            printf("Configuring Device %u profile: \"%s\"\n", dev_idx, profile);
+            fflush(stdout);
+            int sys_res = system(cmd);
+            if (sys_res != 0) {
+                fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
+            }
+        } else {
+            printf("Configuring Device %u profile: \"default\" (skipping)\n", dev_idx);
+            fflush(stdout);
+        }
+        
+        printf("Running benchmarks on Device %u (%s)...\n", dev_idx, device_names[d]);
+        fflush(stdout);
+        
+        results[d] = run_benchmark_on_device(args, dev_idx, 1, &counts[d]);
+        if (!results[d]) {
+            fprintf(stderr, "Error: Failed to run benchmarks on Device %u\n", dev_idx);
+            for (uint32_t k = 0; k < d; k++) {
+                if (results[k]) free(results[k]);
+            }
+            return 1;
+        }
+
+        if (d > 0 && counts[d] != counts[0]) {
+            fprintf(stderr, "Error: Mismatched result sizes between devices (%u vs %u)\n", counts[0], counts[d]);
+            for (uint32_t k = 0; k <= d; k++) {
+                if (results[k]) free(results[k]);
+            }
+            return 1;
+        }
     }
 
     // Format headers
@@ -716,12 +740,25 @@ int main(int argc, char** argv) {
 
     // Display Markdown table side-by-side
     printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
-    printf("| Matrix Size | Device 0 (RTX A4000) [%s] | Device 2 (CMP 70HX) [%s] |\n", perf_label, perf_label);
-    printf("| :--- | :---: | :---: |\n");
+    printf("| Matrix Size");
+    for (uint32_t d = 0; d < args.multi_device_count; d++) {
+        printf(" | Device %u (%s) [%s]", args.multi_devices[d], device_names[d], perf_label);
+    }
+    printf(" |\n");
+
+    printf("| :---");
+    for (uint32_t d = 0; d < args.multi_device_count; d++) {
+        printf(" | :---:");
+    }
+    printf(" |\n");
 
     uint32_t n = args.matrix_start_size;
-    for (uint32_t i = 0; i < count0; i++) {
-        printf("| %u x %u | %.3f | %.3f |\n", n, n, results0[i], results2[i]);
+    for (uint32_t i = 0; i < counts[0]; i++) {
+        printf("| %u x %u", n, n);
+        for (uint32_t d = 0; d < args.multi_device_count; d++) {
+            printf(" | %.3f", results[d][i]);
+        }
+        printf(" |\n");
         
         uint32_t next_n = n + args.matrix_step_size;
         if (next_n > args.matrix_size) next_n = args.matrix_size;
@@ -736,11 +773,19 @@ int main(int argc, char** argv) {
         snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
         FILE* csv_file = fopen(filename, "w");
         if (csv_file) {
-            fprintf(csv_file, "Matrix Size,Device 0 (RTX A4000) [%s],Device 2 (CMP 70HX) [%s]\n", perf_label, perf_label);
+            fprintf(csv_file, "Matrix Size");
+            for (uint32_t d = 0; d < args.multi_device_count; d++) {
+                fprintf(csv_file, ",Device %u (%s) [%s]", args.multi_devices[d], device_names[d], perf_label);
+            }
+            fprintf(csv_file, "\n");
             
             n = args.matrix_start_size;
-            for (uint32_t i = 0; i < count0; i++) {
-                fprintf(csv_file, "%u,%.3f,%.3f\n", n, results0[i], results2[i]);
+            for (uint32_t i = 0; i < counts[0]; i++) {
+                fprintf(csv_file, "%u", n);
+                for (uint32_t d = 0; d < args.multi_device_count; d++) {
+                    fprintf(csv_file, ",%.3f", results[d][i]);
+                }
+                fprintf(csv_file, "\n");
                 
                 uint32_t next_n = n + args.matrix_step_size;
                 if (next_n > args.matrix_size) next_n = args.matrix_size;
@@ -754,8 +799,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    free(results0);
-    free(results2);
+    for (uint32_t d = 0; d < args.multi_device_count; d++) {
+        if (results[d]) free(results[d]);
+    }
 
     return 0;
 }

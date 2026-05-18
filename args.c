@@ -3,6 +3,110 @@
 #include <stdlib.h>
 #include <string.h>
 
+static char* trim(char* str) {
+    while (*str == ' ' || *str == '\t' || *str == '\r' || *str == '\n') {
+        str++;
+    }
+    if (*str == 0) return str;
+    char* end = str + strlen(str) - 1;
+    while (end > str && (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')) {
+        *end = 0;
+        end--;
+    }
+    return str;
+}
+
+static void parse_devices(AppArgs* args, const char* str) {
+    args->multi_device_count = 0;
+    char* val_copy = strdup(str);
+    char* token = strtok(val_copy, ",");
+    while (token && args->multi_device_count < 32) {
+        char* trimmed = trim(token);
+        args->multi_devices[args->multi_device_count++] = atoi(trimmed);
+        token = strtok(NULL, ",");
+    }
+    free(val_copy);
+    if (args->multi_device_count > 0) {
+        args->device_index = args->multi_devices[0];
+    }
+}
+
+static void parse_profiles(AppArgs* args, const char* str) {
+    args->multi_profile_count = 0;
+    char* val_copy = strdup(str);
+    char* token = strtok(val_copy, ",");
+    while (token && args->multi_profile_count < 32) {
+        char* p = token;
+        while (*p == ' ' || *p == '\t' || *p == '"' || *p == '\'') p++;
+        size_t len = strlen(p);
+        while (len > 0 && (p[len - 1] == ' ' || p[len - 1] == '\t' || p[len - 1] == '"' || p[len - 1] == '\'')) {
+            p[len - 1] = '\0';
+            len--;
+        }
+        args->multi_profiles[args->multi_profile_count++] = strdup(p);
+        token = strtok(NULL, ",");
+    }
+    free(val_copy);
+    if (args->multi_profile_count > 0) {
+        args->lact_profile = args->multi_profiles[0];
+    }
+}
+
+static void load_from_ini(AppArgs* args, const char* filepath) {
+    FILE* file = fopen(filepath, "r");
+    if (!file) {
+        return;
+    }
+
+    printf("Loading settings from %s...\n", filepath);
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        char* trimmed = trim(line);
+        if (trimmed[0] == '\0' || trimmed[0] == ';' || trimmed[0] == '#' || trimmed[0] == '[') {
+            continue;
+        }
+
+        char* eq = strchr(trimmed, '=');
+        if (!eq) continue;
+
+        *eq = '\0';
+        char* key = trim(trimmed);
+        char* val = trim(eq + 1);
+
+        if (strcmp(key, "matrix-size") == 0 || strcmp(key, "matrix_size") == 0 || strcmp(key, "ms") == 0) {
+            args->matrix_size = atoi(val);
+        } else if (strcmp(key, "matrix-start-size") == 0 || strcmp(key, "matrix_start_size") == 0 || strcmp(key, "mss") == 0) {
+            args->matrix_start_size = atoi(val);
+        } else if (strcmp(key, "matrix-increment-step") == 0 || strcmp(key, "matrix_increment_step") == 0 || strcmp(key, "mis") == 0) {
+            args->matrix_step_size = atoi(val);
+        } else if (strcmp(key, "iterations") == 0 || strcmp(key, "i") == 0) {
+            args->iterations = atoi(val);
+        } else if (strcmp(key, "device") == 0 || strcmp(key, "d") == 0) {
+            parse_devices(args, val);
+        } else if (strcmp(key, "data-type") == 0 || strcmp(key, "data_type") == 0 || strcmp(key, "dt") == 0) {
+            if (strcmp(val, "fp16") == 0) args->data_type = DT_FP16;
+            else if (strcmp(val, "int16") == 0) args->data_type = DT_INT16;
+            else if (strcmp(val, "fp32") == 0) args->data_type = DT_FP32;
+            else if (strcmp(val, "int32") == 0) args->data_type = DT_INT32;
+        } else if (strcmp(key, "device-list") == 0 || strcmp(key, "device_list") == 0 || strcmp(key, "dl") == 0) {
+            args->list_devices = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
+        } else if (strcmp(key, "operator") == 0 || strcmp(key, "o") == 0) {
+            if (strcmp(val, "mul") == 0) args->operator_type = OP_MUL;
+            else if (strcmp(val, "add") == 0) args->operator_type = OP_ADD;
+            else if (strcmp(val, "sub") == 0) args->operator_type = OP_SUB;
+            else if (strcmp(val, "div") == 0) args->operator_type = OP_DIV;
+            else if (strcmp(val, "mad") == 0) args->operator_type = OP_MAD;
+        } else if (strcmp(key, "save-csv") == 0 || strcmp(key, "save_csv") == 0 || strcmp(key, "csv") == 0) {
+            args->save_csv = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
+        } else if (strcmp(key, "multi-bench") == 0 || strcmp(key, "multi_bench") == 0 || strcmp(key, "mb") == 0) {
+            args->multi_bench = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
+        } else if (strcmp(key, "lact") == 0 || strcmp(key, "l") == 0) {
+            parse_profiles(args, val);
+        }
+    }
+    fclose(file);
+}
+
 AppArgs parse_args(int argc, char** argv) {
     AppArgs args = { 
         .matrix_size = 1024, 
@@ -17,6 +121,10 @@ AppArgs parse_args(int argc, char** argv) {
         .data_type = DT_FP16,
         .operator_type = OP_MUL
     };
+    
+    // Load options from settings.ini if present, which can then be overridden by cmd line args
+    load_from_ini(&args, "settings.ini");
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-ms") == 0 || strcmp(argv[i], "--matrix-size") == 0) {
             if (i + 1 < argc) {
@@ -48,7 +156,7 @@ AppArgs parse_args(int argc, char** argv) {
             }
         } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--device") == 0) {
             if (i + 1 < argc) {
-                args.device_index = atoi(argv[++i]);
+                parse_devices(&args, argv[++i]);
             } else {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
@@ -92,7 +200,7 @@ AppArgs parse_args(int argc, char** argv) {
             args.multi_bench = 1;
         } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--lact") == 0) {
             if (i + 1 < argc) {
-                args.lact_profile = argv[++i];
+                parse_profiles(&args, argv[++i]);
             } else {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
@@ -117,5 +225,17 @@ AppArgs parse_args(int argc, char** argv) {
             fprintf(stderr, "Warning: Unrecognized command-line parameter '%s'\n", argv[i]);
         }
     }
+
+    if (args.multi_bench && args.multi_device_count == 0) {
+        args.multi_device_count = 2;
+        args.multi_devices[0] = 0;
+        args.multi_devices[1] = 2;
+    }
+    if (args.multi_bench && args.multi_profile_count == 0) {
+        args.multi_profile_count = 2;
+        args.multi_profiles[0] = strdup("0_210_405");
+        args.multi_profiles[1] = strdup("2_210_405");
+    }
+
     return args;
 }
