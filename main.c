@@ -507,6 +507,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         }
         csv_file = fopen(filename, "w");
         if (csv_file) {
+            fprintf(csv_file, "LACT Profile: %s\n", args.lact_profile);
             fprintf(csv_file, "Matrix Size,Performance (%s)\n", perf_label);
             if (!silent) printf("Saving results to %s\n", filename);
         } else {
@@ -530,6 +531,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     vkQueueWaitIdle(queue);
 
     if (!silent) {
+        printf("LACT Profile: %s\n", args.lact_profile);
         printf("Benchmarking %s %s from %ux%u to %ux%u with step %u...\n\n", op_str, type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
         printf("| Matrix Size | Perf, %s |\n", perf_label);
         printf("|-------------|--------------|\n");
@@ -747,6 +749,11 @@ int main(int argc, char** argv) {
         }
 
         // Display Markdown table side-by-side
+        printf("\nLACT Profiles: ");
+        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+            const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
+            printf("%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
+        }
         printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
         printf("| Matrix Size");
         for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
@@ -781,6 +788,12 @@ int main(int argc, char** argv) {
             snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
             FILE* csv_file = fopen(filename, "w");
             if (csv_file) {
+                fprintf(csv_file, "LACT Profiles: ");
+                for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                    const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
+                    fprintf(csv_file, "%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
+                }
+                fprintf(csv_file, "\n");
                 fprintf(csv_file, "Matrix Size");
                 for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
                     fprintf(csv_file, ",Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
