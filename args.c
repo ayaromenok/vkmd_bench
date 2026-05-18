@@ -223,7 +223,7 @@ AppArgs parse_args(int argc, char** argv) {
             }
         } else if (strcmp(argv[i], "-csv") == 0 || strcmp(argv[i], "--save-csv") == 0) {
             args.save_csv = 1;
-        } else if (strcmp(argv[i], "-mb") == 0 || strcmp(argv[i], "--multi-bench") == 0) {
+        } else if (strcmp(argv[i], "-mdb") == 0 || strcmp(argv[i], "--multi-device-bench") == 0) {
             args.multi_bench = 1;
         } else if (strcmp(argv[i], "-l") == 0 || strcmp(argv[i], "--lact") == 0) {
             if (i + 1 < argc) {
@@ -244,7 +244,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -dl, --device-list                     List available Vulkan devices and exit\n");
             printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad (default: mul)\n");
             printf("  -csv, --save-csv                       Save results to CSV file\n");
-            printf("  -mb, --multi-bench                     Benchmark device 0 and 2 side-by-side\n");
+            printf("  -mdb, --multi-device-bench             Benchmark device 0 and 2 side-by-side\n");
             printf("  -l, --lact <profile>                   Set LACT profile name string (default: 210_405)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
