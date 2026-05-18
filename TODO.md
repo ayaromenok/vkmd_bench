@@ -6,4 +6,4 @@ reorganize file structure:
  - separate ini file to settins.ini and banchmark.ini
  - merge 'matmul.comp' and 'elemop.comp'
 
-find more suitable name for project
+add pause between tests for cool-down device
