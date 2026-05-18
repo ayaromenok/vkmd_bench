@@ -17,7 +17,8 @@ Running benchmarks on Device 0...
 
 Configuring Device 2 (CMP 70HX) profile: "2_210_405"
 2_210_405
-Running benchmarks on Device 2...```
+Running benchmarks on Device 2...
+```
 
 #### Dual Benchmark Results: MUL FP16
 
