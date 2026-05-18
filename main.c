@@ -659,14 +659,17 @@ int main(int argc, char** argv) {
     }
 
     if (!args.multi_bench) {
-        // Single device benchmark run for each operator
+        // Single device benchmark run for each operator and data type
         for (uint32_t op_idx = 0; op_idx < args.multi_operator_count; op_idx++) {
-            AppArgs temp_args = args;
-            temp_args.operator_type = args.multi_operators[op_idx];
-            uint32_t count = 0;
-            double* res = run_benchmark_on_device(temp_args, temp_args.device_index, 0, &count);
-            if (res) {
-                free(res);
+            for (uint32_t dt_idx = 0; dt_idx < args.multi_data_type_count; dt_idx++) {
+                AppArgs temp_args = args;
+                temp_args.operator_type = args.multi_operators[op_idx];
+                temp_args.data_type = args.multi_data_types[dt_idx];
+                uint32_t count = 0;
+                double* res = run_benchmark_on_device(temp_args, temp_args.device_index, 0, &count);
+                if (res) {
+                    free(res);
+                }
             }
         }
         return 0;
@@ -676,152 +679,155 @@ int main(int argc, char** argv) {
     printf("--- Starting Multi Device Benchmarking ---\n");
     
     for (uint32_t op_idx = 0; op_idx < args.multi_operator_count; op_idx++) {
-        AppArgs temp_args = args;
-        temp_args.operator_type = args.multi_operators[op_idx];
+        for (uint32_t dt_idx = 0; dt_idx < args.multi_data_type_count; dt_idx++) {
+            AppArgs temp_args = args;
+            temp_args.operator_type = args.multi_operators[op_idx];
+            temp_args.data_type = args.multi_data_types[dt_idx];
 
-        double* results[32] = {NULL};
-        uint32_t counts[32] = {0};
-        char device_names[32][256];
+            double* results[32] = {NULL};
+            uint32_t counts[32] = {0};
+            char device_names[32][256];
 
-        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-            uint32_t dev_idx = temp_args.multi_devices[d];
-            const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
-            get_device_name(dev_idx, device_names[d], sizeof(device_names[d]));
-
-            if (d > 0) printf("\n");
-
-            if (strcmp(profile, "default") != 0) {
-                char cmd[256];
-                snprintf(cmd, sizeof(cmd), "lact cli -g %u profile set \"%s\"", dev_idx, profile);
-                printf("Configuring Device %u profile: \"%s\"\n", dev_idx, profile);
-                fflush(stdout);
-                int sys_res = system(cmd);
-                if (sys_res != 0) {
-                    fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
-                }
-            } else {
-                printf("Configuring Device %u profile: \"default\" (skipping)\n", dev_idx);
-                fflush(stdout);
-            }
-            
-            printf("Running benchmarks on Device %u (%s)...\n", dev_idx, device_names[d]);
-            fflush(stdout);
-            
-            results[d] = run_benchmark_on_device(temp_args, dev_idx, 1, &counts[d]);
-            if (!results[d]) {
-                fprintf(stderr, "Error: Failed to run benchmarks on Device %u\n", dev_idx);
-                for (uint32_t k = 0; k < d; k++) {
-                    if (results[k]) free(results[k]);
-                }
-                return 1;
-            }
-
-            if (d > 0 && counts[d] != counts[0]) {
-                fprintf(stderr, "Error: Mismatched result sizes between devices (%u vs %u)\n", counts[0], counts[d]);
-                for (uint32_t k = 0; k <= d; k++) {
-                    if (results[k]) free(results[k]);
-                }
-                return 1;
-            }
-        }
-
-        // Format headers
-        const char* perf_label = "GFLOPS";
-        if (temp_args.data_type == DT_INT16 || temp_args.data_type == DT_INT32) {
-            perf_label = "GOPS";
-        }
-
-        const char* type_str = "FP16";
-        switch(temp_args.data_type) {
-            case DT_FP16: type_str = "FP16"; break;
-            case DT_INT16: type_str = "INT16"; break;
-            case DT_FP32: type_str = "FP32"; break;
-            case DT_INT32: type_str = "INT32"; break;
-        }
-
-        const char* op_str = "MUL";
-        switch(temp_args.operator_type) {
-            case OP_MUL: op_str = "MUL"; break;
-            case OP_ADD: op_str = "ADD"; break;
-            case OP_SUB: op_str = "SUB"; break;
-            case OP_DIV: op_str = "DIV"; break;
-            case OP_MAD: op_str = "MAD"; break;
-        }
-
-        // Display Markdown table side-by-side
-        printf("\nLACT Profiles: ");
-        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-            const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
-            printf("%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
-        }
-        printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
-        printf("| Matrix Size");
-        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-            printf(" | Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
-        }
-        printf(" |\n");
-
-        printf("| :---");
-        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-            printf(" | :---:");
-        }
-        printf(" |\n");
-
-        uint32_t n = temp_args.matrix_start_size;
-        for (uint32_t i = 0; i < counts[0]; i++) {
-            printf("| %u x %u", n, n);
             for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-                printf(" | %.3f", results[d][i]);
+                uint32_t dev_idx = temp_args.multi_devices[d];
+                const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
+                get_device_name(dev_idx, device_names[d], sizeof(device_names[d]));
+
+                if (d > 0) printf("\n");
+
+                if (strcmp(profile, "default") != 0) {
+                    char cmd[256];
+                    snprintf(cmd, sizeof(cmd), "lact cli -g %u profile set \"%s\"", dev_idx, profile);
+                    printf("Configuring Device %u profile: \"%s\"\n", dev_idx, profile);
+                    fflush(stdout);
+                    int sys_res = system(cmd);
+                    if (sys_res != 0) {
+                        fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
+                    }
+                } else {
+                    printf("Configuring Device %u profile: \"default\" (skipping)\n", dev_idx);
+                    fflush(stdout);
+                }
+                
+                printf("Running benchmarks on Device %u (%s)...\n", dev_idx, device_names[d]);
+                fflush(stdout);
+                
+                results[d] = run_benchmark_on_device(temp_args, dev_idx, 1, &counts[d]);
+                if (!results[d]) {
+                    fprintf(stderr, "Error: Failed to run benchmarks on Device %u\n", dev_idx);
+                    for (uint32_t k = 0; k < d; k++) {
+                        if (results[k]) free(results[k]);
+                    }
+                    return 1;
+                }
+
+                if (d > 0 && counts[d] != counts[0]) {
+                    fprintf(stderr, "Error: Mismatched result sizes between devices (%u vs %u)\n", counts[0], counts[d]);
+                    for (uint32_t k = 0; k <= d; k++) {
+                        if (results[k]) free(results[k]);
+                    }
+                    return 1;
+                }
+            }
+
+            // Format headers
+            const char* perf_label = "GFLOPS";
+            if (temp_args.data_type == DT_INT16 || temp_args.data_type == DT_INT32) {
+                perf_label = "GOPS";
+            }
+
+            const char* type_str = "FP16";
+            switch(temp_args.data_type) {
+                case DT_FP16: type_str = "FP16"; break;
+                case DT_INT16: type_str = "INT16"; break;
+                case DT_FP32: type_str = "FP32"; break;
+                case DT_INT32: type_str = "INT32"; break;
+            }
+
+            const char* op_str = "MUL";
+            switch(temp_args.operator_type) {
+                case OP_MUL: op_str = "MUL"; break;
+                case OP_ADD: op_str = "ADD"; break;
+                case OP_SUB: op_str = "SUB"; break;
+                case OP_DIV: op_str = "DIV"; break;
+                case OP_MAD: op_str = "MAD"; break;
+            }
+
+            // Display Markdown table side-by-side
+            printf("\nLACT Profiles: ");
+            for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
+                printf("%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
+            }
+            printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
+            printf("| Matrix Size");
+            for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                printf(" | Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
             }
             printf(" |\n");
-            
-            uint32_t next_n = n + temp_args.matrix_step_size;
-            if (next_n > temp_args.matrix_size) next_n = temp_args.matrix_size;
-            if (n >= temp_args.matrix_size) break;
-            n = next_n;
-        }
-        printf("\n");
 
-        // Save CSV side-by-side if required
-        if (temp_args.save_csv) {
-            char filename[256];
-            snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
-            FILE* csv_file = fopen(filename, "w");
-            if (csv_file) {
-                fprintf(csv_file, "LACT Profiles: ");
+            printf("| :---");
+            for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                printf(" | :---:");
+            }
+            printf(" |\n");
+
+            uint32_t n = temp_args.matrix_start_size;
+            for (uint32_t i = 0; i < counts[0]; i++) {
+                printf("| %u x %u", n, n);
                 for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-                    const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
-                    fprintf(csv_file, "%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
+                    printf(" | %.3f", results[d][i]);
                 }
-                fprintf(csv_file, "\n");
-                fprintf(csv_file, "Matrix Size");
-                for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-                    fprintf(csv_file, ",Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
-                }
-                fprintf(csv_file, "\n");
+                printf(" |\n");
                 
-                n = temp_args.matrix_start_size;
-                for (uint32_t i = 0; i < counts[0]; i++) {
-                    fprintf(csv_file, "%u", n);
+                uint32_t next_n = n + temp_args.matrix_step_size;
+                if (next_n > temp_args.matrix_size) next_n = temp_args.matrix_size;
+                if (n >= temp_args.matrix_size) break;
+                n = next_n;
+            }
+            printf("\n");
+
+            // Save CSV side-by-side if required
+            if (temp_args.save_csv) {
+                char filename[256];
+                snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
+                FILE* csv_file = fopen(filename, "w");
+                if (csv_file) {
+                    fprintf(csv_file, "LACT Profiles: ");
                     for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-                        fprintf(csv_file, ",%.3f", results[d][i]);
+                        const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
+                        fprintf(csv_file, "%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
+                    }
+                    fprintf(csv_file, "\n");
+                    fprintf(csv_file, "Matrix Size");
+                    for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                        fprintf(csv_file, ",Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
                     }
                     fprintf(csv_file, "\n");
                     
-                    uint32_t next_n = n + temp_args.matrix_step_size;
-                    if (next_n > temp_args.matrix_size) next_n = temp_args.matrix_size;
-                    if (n >= temp_args.matrix_size) break;
-                    n = next_n;
+                    n = temp_args.matrix_start_size;
+                    for (uint32_t i = 0; i < counts[0]; i++) {
+                        fprintf(csv_file, "%u", n);
+                        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                            fprintf(csv_file, ",%.3f", results[d][i]);
+                        }
+                        fprintf(csv_file, "\n");
+                        
+                        uint32_t next_n = n + temp_args.matrix_step_size;
+                        if (next_n > temp_args.matrix_size) next_n = temp_args.matrix_size;
+                        if (n >= temp_args.matrix_size) break;
+                        n = next_n;
+                    }
+                    fclose(csv_file);
+                    printf("Saved side-by-side CSV results to: %s\n", filename);
+                } else {
+                    fprintf(stderr, "Error: Could not open %s for writing CSV\n", filename);
                 }
-                fclose(csv_file);
-                printf("Saved side-by-side CSV results to: %s\n", filename);
-            } else {
-                fprintf(stderr, "Error: Could not open %s for writing CSV\n", filename);
             }
-        }
 
-        for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
-            if (results[d]) free(results[d]);
+            for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
+                if (results[d]) free(results[d]);
+            }
         }
     }
 

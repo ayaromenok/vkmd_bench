@@ -77,6 +77,30 @@ static void parse_operators(AppArgs* args, const char* str) {
     }
 }
 
+static void parse_data_types(AppArgs* args, const char* str) {
+    args->multi_data_type_count = 0;
+    char* val_copy = strdup(str);
+    char* token = strtok(val_copy, ",");
+    while (token && args->multi_data_type_count < 32) {
+        char* trimmed = trim(token);
+        DataType dt = DT_FP16;
+        if (strcmp(trimmed, "fp16") == 0) dt = DT_FP16;
+        else if (strcmp(trimmed, "int16") == 0) dt = DT_INT16;
+        else if (strcmp(trimmed, "fp32") == 0) dt = DT_FP32;
+        else if (strcmp(trimmed, "int32") == 0) dt = DT_INT32;
+        else {
+            fprintf(stderr, "Error: Unknown data type %s (use fp16, int16, fp32, or int32)\n", trimmed);
+            exit(1);
+        }
+        args->multi_data_types[args->multi_data_type_count++] = dt;
+        token = strtok(NULL, ",");
+    }
+    free(val_copy);
+    if (args->multi_data_type_count > 0) {
+        args->data_type = args->multi_data_types[0];
+    }
+}
+
 static void load_from_ini(AppArgs* args, const char* filepath) {
     FILE* file = fopen(filepath, "r");
     if (!file) {
@@ -109,10 +133,7 @@ static void load_from_ini(AppArgs* args, const char* filepath) {
         } else if (strcmp(key, "device") == 0 || strcmp(key, "d") == 0) {
             parse_devices(args, val);
         } else if (strcmp(key, "data-type") == 0 || strcmp(key, "data_type") == 0 || strcmp(key, "dt") == 0) {
-            if (strcmp(val, "fp16") == 0) args->data_type = DT_FP16;
-            else if (strcmp(val, "int16") == 0) args->data_type = DT_INT16;
-            else if (strcmp(val, "fp32") == 0) args->data_type = DT_FP32;
-            else if (strcmp(val, "int32") == 0) args->data_type = DT_INT32;
+            parse_data_types(args, val);
         } else if (strcmp(key, "device-list") == 0 || strcmp(key, "device_list") == 0 || strcmp(key, "dl") == 0) {
             args->list_devices = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
         } else if (strcmp(key, "operator") == 0 || strcmp(key, "o") == 0) {
@@ -141,7 +162,8 @@ AppArgs parse_args(int argc, char** argv) {
         .lact_profile = "210_405",
         .data_type = DT_FP16,
         .operator_type = OP_MUL,
-        .multi_operator_count = 0
+        .multi_operator_count = 0,
+        .multi_data_type_count = 0
     };
     
     // Load options from settings.ini if present, which can then be overridden by cmd line args
@@ -185,15 +207,7 @@ AppArgs parse_args(int argc, char** argv) {
             }
         } else if (strcmp(argv[i], "-dt") == 0 || strcmp(argv[i], "--data-type") == 0) {
             if (i + 1 < argc) {
-                char* dt = argv[++i];
-                if (strcmp(dt, "fp16") == 0) args.data_type = DT_FP16;
-                else if (strcmp(dt, "int16") == 0) args.data_type = DT_INT16;
-                else if (strcmp(dt, "fp32") == 0) args.data_type = DT_FP32;
-                else if (strcmp(dt, "int32") == 0) args.data_type = DT_INT32;
-                else {
-                    fprintf(stderr, "Error: Unknown data type %s (use fp16, int16, fp32, or int32)\n", dt);
-                    exit(1);
-                }
+                parse_data_types(&args, argv[++i]);
             } else {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
@@ -253,6 +267,11 @@ AppArgs parse_args(int argc, char** argv) {
     if (args.multi_operator_count == 0) {
         args.multi_operator_count = 1;
         args.multi_operators[0] = args.operator_type;
+    }
+
+    if (args.multi_data_type_count == 0) {
+        args.multi_data_type_count = 1;
+        args.multi_data_types[0] = args.data_type;
     }
 
     return args;
