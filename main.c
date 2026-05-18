@@ -469,7 +469,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     FILE* csv_file = NULL;
     // CSV saving logic is only handled in non-dual-bench mode here.
     // If dual bench is requested, main() will do the side-by-side CSV writing.
-    if (args.save_csv && !args.dual_bench) {
+    if (args.save_csv && !args.multi_bench) {
         FILE* pipe = popen("lact cli profile", "r");
         char filename[256] = "results.csv";
         if (pipe) {
@@ -634,7 +634,7 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    if (!args.dual_bench) {
+    if (!args.multi_bench) {
         // Single device benchmark run
         uint32_t count = 0;
         double* res = run_benchmark_on_device(args, args.device_index, 0, &count);
@@ -644,11 +644,14 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    // Dual Benchmarking Mode
-    printf("--- Starting Dual Device Benchmarking ---\n");
-    printf("Configuring Device 0 (RTX A4000) profile: \"0_210_405\"\n");
+    // Multi Benchmarking Mode
+    printf("--- Starting Multi Device Benchmarking ---\n");
+    
+    char cmd0[256];
+    snprintf(cmd0, sizeof(cmd0), "lact cli -g 0 profile set \"0_%s\"", args.lact_profile);
+    printf("Configuring Device 0 (RTX A4000) profile: \"0_%s\"\n", args.lact_profile);
     fflush(stdout);
-    int sys_res = system("lact cli -g 0 profile set \"0_210_405\"");
+    int sys_res = system(cmd0);
     if (sys_res != 0) {
         fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
     }
@@ -662,9 +665,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    printf("\nConfiguring Device 2 (CMP 70HX) profile: \"2_210_405\"\n");
+    char cmd2[256];
+    snprintf(cmd2, sizeof(cmd2), "lact cli -g 2 profile set \"2_%s\"", args.lact_profile);
+    printf("\nConfiguring Device 2 (CMP 70HX) profile: \"2_%s\"\n", args.lact_profile);
     fflush(stdout);
-    sys_res = system("lact cli -g 2 profile set \"2_210_405\"");
+    sys_res = system(cmd2);
     if (sys_res != 0) {
         fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
     }
@@ -710,7 +715,7 @@ int main(int argc, char** argv) {
     }
 
     // Display Markdown table side-by-side
-    printf("\n### Dual Benchmark Results: %s %s\n\n", op_str, type_str);
+    printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
     printf("| Matrix Size | Device 0 (RTX A4000) [%s] | Device 2 (CMP 70HX) [%s] |\n", perf_label, perf_label);
     printf("| :--- | :---: | :---: |\n");
 
@@ -728,7 +733,7 @@ int main(int argc, char** argv) {
     // Save CSV side-by-side if required
     if (args.save_csv) {
         char filename[256];
-        snprintf(filename, sizeof(filename), "dual_bench_%s_%s.csv", op_str, type_str);
+        snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
         FILE* csv_file = fopen(filename, "w");
         if (csv_file) {
             fprintf(csv_file, "Matrix Size,Device 0 (RTX A4000) [%s],Device 2 (CMP 70HX) [%s]\n", perf_label, perf_label);
