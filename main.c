@@ -100,18 +100,10 @@ void createBuffer(VkDevice device, VkPhysicalDevice physicalDevice, size_t size,
         exit(1);
     }
     vkBindBufferMemory(device, *buffer, *memory, 0);
-
-    const char* memTypeStr = "UNKNOWN";
-    if (properties & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-        memTypeStr = "DEVICE LOCAL";
-    } else if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-        memTypeStr = "HOST VISIBLE";
-    }
-    //printf("Buffer allocated in %s memory (size: %zu MB)\n", memTypeStr, size/1024/1024);
 }
 
-int main(int argc, char** argv) {
-    AppArgs args = parse_args(argc, argv);
+// core benchmarking logic extracted into a reusable function
+double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent, uint32_t* out_count) {
     uint32_t N_SIZE = args.matrix_size;
 
     VkResult res;
@@ -161,41 +153,60 @@ int main(int argc, char** argv) {
     shaderFile = shaderFileBuf;
 
     VkInstance instance;
-    vkCreateInstance(&createInfo, NULL, &instance);
+    res = vkCreateInstance(&createInfo, NULL, &instance);
+    if (res != VK_SUCCESS) {
+        fprintf(stderr, "Failed to create Vulkan instance (res: %d)\n", res);
+        return NULL;
+    }
 
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, NULL);
-    if (deviceCount == 0) { fprintf(stderr, "No Vulkan devices found\n"); return 1; }
+    if (deviceCount == 0) {
+        fprintf(stderr, "No Vulkan devices found\n");
+        vkDestroyInstance(instance, NULL);
+        return NULL;
+    }
     
     VkPhysicalDevice* devices = malloc(sizeof(VkPhysicalDevice) * deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices);
     
     if (args.list_devices) {
-        printf("Available Vulkan devices:\n");
-        for (uint32_t i = 0; i < deviceCount; i++) {
-            VkPhysicalDeviceProperties props;
-            vkGetPhysicalDeviceProperties(devices[i], &props);
-            printf("[%u] %s\n", i, props.deviceName);
+        if (!silent) {
+            printf("Available Vulkan devices:\n");
+            for (uint32_t i = 0; i < deviceCount; i++) {
+                VkPhysicalDeviceProperties props;
+                vkGetPhysicalDeviceProperties(devices[i], &props);
+                printf("[%u] %s\n", i, props.deviceName);
+            }
         }
-        return 0;
+        free(devices);
+        vkDestroyInstance(instance, NULL);
+        if (out_count) *out_count = 0;
+        return NULL;
     }
 
-    if (args.device_index >= deviceCount) {
-        fprintf(stderr, "Error: Selected device index %u is out of bounds (found %u devices)\n", args.device_index, deviceCount);
-        printf("Available devices:\n");
-        for (uint32_t i = 0; i < deviceCount; i++) {
-            VkPhysicalDeviceProperties props;
-            vkGetPhysicalDeviceProperties(devices[i], &props);
-            printf("[%u] %s\n", i, props.deviceName);
+    if (target_device >= deviceCount) {
+        fprintf(stderr, "Error: Selected device index %u is out of bounds (found %u devices)\n", target_device, deviceCount);
+        if (!silent) {
+            printf("Available devices:\n");
+            for (uint32_t i = 0; i < deviceCount; i++) {
+                VkPhysicalDeviceProperties props;
+                vkGetPhysicalDeviceProperties(devices[i], &props);
+                printf("[%u] %s\n", i, props.deviceName);
+            }
         }
-        return 1;
+        free(devices);
+        vkDestroyInstance(instance, NULL);
+        return NULL;
     }
 
-    VkPhysicalDevice physicalDevice = devices[args.device_index];
+    VkPhysicalDevice physicalDevice = devices[target_device];
 
     VkPhysicalDeviceProperties deviceProps;
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProps);
-    printf("Using device [%u]: %s\n", args.device_index, deviceProps.deviceName);
+    if (!silent) {
+        printf("Using device [%u]: %s\n", target_device, deviceProps.deviceName);
+    }
 
     VkPhysicalDeviceMemoryProperties deviceMemProps;
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemProps);
@@ -205,10 +216,6 @@ int main(int argc, char** argv) {
             totalDeviceLocalMemory += deviceMemProps.memoryHeaps[i].size;
         }
     }
-    //printf("Maximum device local memory: %zu MB\n", totalDeviceLocalMemory / 1024 / 1024);
-
-    //printf("Matrix size: %u x %u\n", N_SIZE, N_SIZE);
-    //fflush(stdout);
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, NULL);
@@ -266,7 +273,10 @@ int main(int argc, char** argv) {
     VkResult devRes = vkCreateDevice(physicalDevice, &deviceCreateInfo, NULL, &device);
     if (devRes != VK_SUCCESS) {
         fprintf(stderr, "Failed to create Vulkan device (res: %d)\n", devRes);
-        exit(1);
+        free(queueFamilies);
+        free(devices);
+        vkDestroyInstance(instance, NULL);
+        return NULL;
     }
 
     VkQueue queue;
@@ -276,19 +286,16 @@ int main(int argc, char** argv) {
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
-    //printf("Creating device buffers...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferA, &memoryA);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferB, &memoryB);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferC, &memoryC);
 
     VkBuffer stagingA, stagingB, stagingC;
     VkDeviceMemory stagingMemoryA, stagingMemoryB, stagingMemoryC;
-    //printf("Creating staging buffers...\n"); fflush(stdout);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingA, &stagingMemoryA);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingB, &stagingMemoryB);
     createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingC, &stagingMemoryC);
 
-    //printf("Mapping staging memory...\n"); fflush(stdout);
     void *dataA_mapped = NULL, *dataB_mapped = NULL;
     VkResult resA = vkMapMemory(device, stagingMemoryA, 0, matrixSize, 0, &dataA_mapped);
     VkResult resB = vkMapMemory(device, stagingMemoryB, 0, matrixSize, 0, &dataB_mapped);
@@ -331,18 +338,36 @@ int main(int argc, char** argv) {
             iB[i] = 2;
         }
     }
-    vkUnmapMemory(device, memoryA);
-    vkUnmapMemory(device, memoryB);
+    vkUnmapMemory(device, stagingMemoryA);
+    vkUnmapMemory(device, stagingMemoryB);
 
-    FILE* f = fopen(shaderFile, "rb");
-    if (!f) { fprintf(stderr, "Error: Could not open %s. Make sure it is in the current directory.\n", shaderFile); return 1; }
-    fseek(f, 0, SEEK_END);
-    long length = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    FILE* f_shader = fopen(shaderFile, "rb");
+    if (!f_shader) {
+        fprintf(stderr, "Error: Could not open %s. Make sure it is in the current directory.\n", shaderFile);
+        // clean up basic resources
+        vkDestroyBuffer(device, bufferA, NULL); vkFreeMemory(device, memoryA, NULL);
+        vkDestroyBuffer(device, bufferB, NULL); vkFreeMemory(device, memoryB, NULL);
+        vkDestroyBuffer(device, bufferC, NULL); vkFreeMemory(device, memoryC, NULL);
+        vkDestroyBuffer(device, stagingA, NULL); vkFreeMemory(device, stagingMemoryA, NULL);
+        vkDestroyBuffer(device, stagingB, NULL); vkFreeMemory(device, stagingMemoryB, NULL);
+        vkDestroyBuffer(device, stagingC, NULL); vkFreeMemory(device, stagingMemoryC, NULL);
+        vkDestroyDevice(device, NULL);
+        free(queueFamilies);
+        free(devices);
+        vkDestroyInstance(instance, NULL);
+        return NULL;
+    }
+    fseek(f_shader, 0, SEEK_END);
+    long length = ftell(f_shader);
+    fseek(f_shader, 0, SEEK_SET);
     uint32_t* code = malloc(length);
-    if (!code) { fprintf(stderr, "Failed to allocate memory for shader code\n"); return 1; }
-    fread(code, 1, length, f);
-    fclose(f);
+    if (!code) {
+        fprintf(stderr, "Failed to allocate memory for shader code\n");
+        fclose(f_shader);
+        return NULL;
+    }
+    fread(code, 1, length, f_shader);
+    fclose(f_shader);
 
     VkDescriptorSetLayoutBinding bindings[3] = {
         {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, NULL},
@@ -387,7 +412,6 @@ int main(int argc, char** argv) {
         {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[2]},
     };
     vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
-
 
     VkShaderModuleCreateInfo shaderInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -442,9 +466,10 @@ int main(int argc, char** argv) {
     VkCommandBuffer commandBuffer;
     vkAllocateCommandBuffers(device, &cmdAllocInfo, &commandBuffer);
 
-
     FILE* csv_file = NULL;
-    if (args.save_csv) {
+    // CSV saving logic is only handled in non-dual-bench mode here.
+    // If dual bench is requested, main() will do the side-by-side CSV writing.
+    if (args.save_csv && !args.dual_bench) {
         FILE* pipe = popen("lact cli profile", "r");
         char filename[256] = "results.csv";
         if (pipe) {
@@ -461,7 +486,7 @@ int main(int argc, char** argv) {
         csv_file = fopen(filename, "w");
         if (csv_file) {
             fprintf(csv_file, "Matrix Size,Performance (%s)\n", perf_label);
-            printf("Saving results to %s\n", filename);
+            if (!silent) printf("Saving results to %s\n", filename);
         } else {
             fprintf(stderr, "Warning: Could not open %s for writing\n", filename);
         }
@@ -482,9 +507,23 @@ int main(int argc, char** argv) {
     vkQueueSubmit(queue, 1, &copySubmitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(queue);
 
-    printf("Benchmarking %s %s from %ux%u to %ux%u with step %u...\n\n", op_str, type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
-    printf("| Matrix Size | Perf, %s |\n", perf_label);
-    printf("|-------------|--------------|\n");
+    if (!silent) {
+        printf("Benchmarking %s %s from %ux%u to %ux%u with step %u...\n\n", op_str, type_str, args.matrix_start_size, args.matrix_start_size, N_SIZE, N_SIZE, args.matrix_step_size);
+        printf("| Matrix Size | Perf, %s |\n", perf_label);
+        printf("|-------------|--------------|\n");
+    }
+
+    // Allocate result array
+    uint32_t step_count = 0;
+    for (uint32_t current_n = args.matrix_start_size; ; ) {
+        step_count++;
+        if (current_n >= N_SIZE) break;
+        uint32_t next_n = current_n + args.matrix_step_size;
+        if (next_n > N_SIZE) next_n = N_SIZE;
+        current_n = next_n;
+    }
+    double* results = malloc(sizeof(double) * step_count);
+    uint32_t step_idx = 0;
 
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -513,7 +552,7 @@ int main(int argc, char** argv) {
         vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(queue);
 
-        // Run for approximately 1 seconds
+        // Run for approximately 1 second
         uint32_t count = 0;
         double start_time = get_time_sec();
         while (get_time_sec() - start_time < 1.0) {
@@ -534,8 +573,14 @@ int main(int argc, char** argv) {
             gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
         }
 
-        printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
-        fflush(stdout);
+        if (!silent) {
+            printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
+            fflush(stdout);
+        }
+
+        if (step_idx < step_count) {
+            results[step_idx++] = gops;
+        }
 
         if (csv_file) {
             fprintf(csv_file, "%u,%f\n", current_n, gops);
@@ -549,57 +594,163 @@ int main(int argc, char** argv) {
         
         sleep(1);
     }
-    printf("\n");
+    if (!silent) {
+        printf("\n");
+    }
     if (csv_file) fclose(csv_file);
 
-    VkCommandBufferBeginInfo beginInfo2 = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-    vkBeginCommandBuffer(commandBuffer, &beginInfo2);
-    VkBufferCopy copyRegionC = { .srcOffset = 0, .dstOffset = 0, .size = matrixSize };
-    vkCmdCopyBuffer(commandBuffer, bufferC, stagingC, 1, &copyRegionC);
-    vkEndCommandBuffer(commandBuffer);
+    // Clean up Vulkan resources completely to prevent memory/resource leaks
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+    vkDestroyCommandPool(device, commandPool, NULL);
+    vkDestroyPipeline(device, pipeline, NULL);
+    vkDestroyPipelineLayout(device, pipelineLayout, NULL);
+    vkDestroyShaderModule(device, shaderModule, NULL);
+    vkDestroyDescriptorPool(device, descriptorPool, NULL);
+    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
+    
+    vkDestroyBuffer(device, bufferA, NULL); vkFreeMemory(device, memoryA, NULL);
+    vkDestroyBuffer(device, bufferB, NULL); vkFreeMemory(device, memoryB, NULL);
+    vkDestroyBuffer(device, bufferC, NULL); vkFreeMemory(device, memoryC, NULL);
+    vkDestroyBuffer(device, stagingA, NULL); vkFreeMemory(device, stagingMemoryA, NULL);
+    vkDestroyBuffer(device, stagingB, NULL); vkFreeMemory(device, stagingMemoryB, NULL);
+    vkDestroyBuffer(device, stagingC, NULL); vkFreeMemory(device, stagingMemoryC, NULL);
+    
+    vkDestroyDevice(device, NULL);
+    free(code);
+    free(queueFamilies);
+    free(devices);
+    vkDestroyInstance(instance, NULL);
 
-    VkSubmitInfo copySubmitInfo2 = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-    };
-    vkQueueSubmit(queue, 1, &copySubmitInfo2, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
+    if (out_count) *out_count = step_idx;
+    return results;
+}
 
-    void* dataC_mapped;
-    vkMapMemory(device, stagingMemoryC, 0, matrixSize, 0, &dataC_mapped);
+int main(int argc, char** argv) {
+    AppArgs args = parse_args(argc, argv);
 
-    // Compute expected values based on operator
-    // A values = 1.0, B values = 2.0
-    float expected_fp;
-    int expected_int;
+    if (args.list_devices) {
+        uint32_t count = 0;
+        run_benchmark_on_device(args, 0, 0, &count);
+        return 0;
+    }
+
+    if (!args.dual_bench) {
+        // Single device benchmark run
+        uint32_t count = 0;
+        double* res = run_benchmark_on_device(args, args.device_index, 0, &count);
+        if (res) {
+            free(res);
+        }
+        return 0;
+    }
+
+    // Dual Benchmarking Mode
+    printf("--- Starting Dual Device Benchmarking ---\n");
+    printf("Configuring Device 0 (RTX A4000) profile: \"0_210_405\"\n");
+    fflush(stdout);
+    int sys_res = system("lact cli -g 0 profile set \"0_210_405\"");
+    if (sys_res != 0) {
+        fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
+    }
+    
+    uint32_t count0 = 0;
+    printf("Running benchmarks on Device 0...\n");
+    fflush(stdout);
+    double* results0 = run_benchmark_on_device(args, 0, 1, &count0);
+    if (!results0) {
+        fprintf(stderr, "Error: Failed to run benchmarks on Device 0\n");
+        return 1;
+    }
+
+    printf("\nConfiguring Device 2 (CMP 70HX) profile: \"2_210_405\"\n");
+    fflush(stdout);
+    sys_res = system("lact cli -g 2 profile set \"2_210_405\"");
+    if (sys_res != 0) {
+        fprintf(stderr, "Warning: lact command returned non-zero status %d. Continuing...\n", sys_res);
+    }
+
+    uint32_t count2 = 0;
+    printf("Running benchmarks on Device 2...\n");
+    fflush(stdout);
+    double* results2 = run_benchmark_on_device(args, 2, 1, &count2);
+    if (!results2) {
+        fprintf(stderr, "Error: Failed to run benchmarks on Device 2\n");
+        free(results0);
+        return 1;
+    }
+
+    if (count0 != count2) {
+        fprintf(stderr, "Error: Mismatched result sizes between devices (%u vs %u)\n", count0, count2);
+        free(results0);
+        free(results2);
+        return 1;
+    }
+
+    // Format headers
+    const char* perf_label = "GFLOPS";
+    if (args.data_type == DT_INT16 || args.data_type == DT_INT32) {
+        perf_label = "GOPS";
+    }
+
+    const char* type_str = "FP16";
+    switch(args.data_type) {
+        case DT_FP16: type_str = "FP16"; break;
+        case DT_INT16: type_str = "INT16"; break;
+        case DT_FP32: type_str = "FP32"; break;
+        case DT_INT32: type_str = "INT32"; break;
+    }
+
+    const char* op_str = "MUL";
     switch(args.operator_type) {
-        case OP_MUL: expected_fp = (float)N_SIZE * 1.0f * 2.0f; expected_int = (int)N_SIZE * 1 * 2; break;
-        case OP_ADD: expected_fp = 1.0f + 2.0f; expected_int = 1 + 2; break;
-        case OP_SUB: expected_fp = 1.0f - 2.0f; expected_int = 1 - 2; break;
-        case OP_DIV: expected_fp = 1.0f / 2.0f; expected_int = 1 / 2; break;
-        case OP_MAD: expected_fp = 1.0f * 2.0f + 1.0f; expected_int = 1 * 2 + 1; break;
+        case OP_MUL: op_str = "MUL"; break;
+        case OP_ADD: op_str = "ADD"; break;
+        case OP_SUB: op_str = "SUB"; break;
+        case OP_DIV: op_str = "DIV"; break;
+        case OP_MAD: op_str = "MAD"; break;
     }
-/*
-    if (args.data_type == DT_FP16) {
-        uint16_t* hC = (uint16_t*)dataC_mapped;
-        printf("Result [0,0]: %f\n", float16_to_float32(hC[0]));
-        printf("Expected [0,0]: %f\n", expected_fp);
-    } else if (args.data_type == DT_INT16) {
-        int16_t* iC = (int16_t*)dataC_mapped;
-        printf("Result [0,0]: %d\n", (int)iC[0]);
-        printf("Expected [0,0]: %d\n", expected_int);
-    } else if (args.data_type == DT_FP32) {
-        float* fC = (float*)dataC_mapped;
-        printf("Result [0,0]: %f\n", fC[0]);
-        printf("Expected [0,0]: %f\n", expected_fp);
-    } else if (args.data_type == DT_INT32) {
-        int32_t* iC = (int32_t*)dataC_mapped;
-        printf("Result [0,0]: %d\n", (int)iC[0]);
-        printf("Expected [0,0]: %d\n", expected_int);
+
+    // Display Markdown table side-by-side
+    printf("\n### Dual Benchmark Results: %s %s\n\n", op_str, type_str);
+    printf("| Matrix Size | Device 0 (RTX A4000) [%s] | Device 2 (CMP 70HX) [%s] |\n", perf_label, perf_label);
+    printf("| :--- | :---: | :---: |\n");
+
+    uint32_t n = args.matrix_start_size;
+    for (uint32_t i = 0; i < count0; i++) {
+        printf("| %u x %u | %.3f | %.3f |\n", n, n, results0[i], results2[i]);
+        
+        uint32_t next_n = n + args.matrix_step_size;
+        if (next_n > args.matrix_size) next_n = args.matrix_size;
+        if (n >= args.matrix_size) break;
+        n = next_n;
     }
-*/
-    vkUnmapMemory(device, stagingMemoryC);
+    printf("\n");
+
+    // Save CSV side-by-side if required
+    if (args.save_csv) {
+        char filename[256];
+        snprintf(filename, sizeof(filename), "dual_bench_%s_%s.csv", op_str, type_str);
+        FILE* csv_file = fopen(filename, "w");
+        if (csv_file) {
+            fprintf(csv_file, "Matrix Size,Device 0 (RTX A4000) [%s],Device 2 (CMP 70HX) [%s]\n", perf_label, perf_label);
+            
+            n = args.matrix_start_size;
+            for (uint32_t i = 0; i < count0; i++) {
+                fprintf(csv_file, "%u,%.3f,%.3f\n", n, results0[i], results2[i]);
+                
+                uint32_t next_n = n + args.matrix_step_size;
+                if (next_n > args.matrix_size) next_n = args.matrix_size;
+                if (n >= args.matrix_size) break;
+                n = next_n;
+            }
+            fclose(csv_file);
+            printf("Saved side-by-side CSV results to: %s\n", filename);
+        } else {
+            fprintf(stderr, "Error: Could not open %s for writing CSV\n", filename);
+        }
+    }
+
+    free(results0);
+    free(results2);
 
     return 0;
 }

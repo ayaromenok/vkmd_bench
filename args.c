@@ -12,6 +12,7 @@ AppArgs parse_args(int argc, char** argv) {
         .device_index = 0, 
         .list_devices = 0, 
         .save_csv = 0,
+        .dual_bench = 0,
         .data_type = DT_FP16,
         .operator_type = OP_MUL
     };
@@ -86,6 +87,8 @@ AppArgs parse_args(int argc, char** argv) {
             }
         } else if (strcmp(argv[i], "-csv") == 0 || strcmp(argv[i], "--save-csv") == 0) {
             args.save_csv = 1;
+        } else if (strcmp(argv[i], "-db") == 0 || strcmp(argv[i], "--dual-bench") == 0) {
+            args.dual_bench = 1;
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -98,6 +101,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -dl, --device-list                     List available Vulkan devices and exit\n");
             printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad (default: mul)\n");
             printf("  -csv, --save-csv                       Save results to CSV file\n");
+            printf("  -db, --dual-bench                      Benchmark device 0 and 2 side-by-side\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
         }

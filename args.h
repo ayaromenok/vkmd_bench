@@ -26,6 +26,7 @@ typedef struct {
     uint32_t device_index;
     int list_devices;
     int save_csv;
+    int dual_bench;
     DataType data_type;
     OperatorType operator_type;
 } AppArgs;
