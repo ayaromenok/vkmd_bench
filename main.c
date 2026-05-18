@@ -507,6 +507,8 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         }
         csv_file = fopen(filename, "w");
         if (csv_file) {
+            fprintf(csv_file, "Operator: %s\n", op_str);
+            fprintf(csv_file, "DataType: %s\n", type_str);
             fprintf(csv_file, "LACT Profile: %s\n", args.lact_profile);
             fprintf(csv_file, "Matrix Size,Performance (%s)\n", perf_label);
             if (!silent) printf("Saving results to %s\n", filename);
@@ -793,6 +795,8 @@ int main(int argc, char** argv) {
                 snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
                 FILE* csv_file = fopen(filename, "w");
                 if (csv_file) {
+                    fprintf(csv_file, "Operator: %s\n", op_str);
+                    fprintf(csv_file, "DataType: %s\n", type_str);
                     fprintf(csv_file, "LACT Profiles: ");
                     for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
                         const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
