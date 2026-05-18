@@ -1,6 +1,6 @@
 # VulKan Multi-Device benchmark
 
-Vulkan benchmark which allow to test devices side-by-side. Originally intended to evaluate NVidia CMP HS series with consumer market devices
+Vulkan benchmark which allow to test devices side-by-side. Originally intended to evaluate NVidia CMP HX series with consumer market devices. 
 
 ### Intro
 
@@ -35,6 +35,8 @@ Running benchmarks on Device 2...
 
 
 ### Options
+
+```
   -ms, --matrix-size <size>              Set max matrix size (default: 1024)
   -mss, --matrix-start-size <sz>         Set start matrix size (default: 32)
   -mis, --matrix-increment-step <step>   Set matrix incrementstep (default: 32)
@@ -44,6 +46,6 @@ Running benchmarks on Device 2...
   -dl, --device-list                     List available Vulkan devices and exit
   -o, --operator <op>                    Select operator: mul, add, sub, div, mad (default: mul)
   -csv, --save-csv                       Save results to CSV file
-  -db, --dual-bench                      Benchmark device 0 and 2 side-by-side
+  -mdb, --multi-device-bench             Benchmark device X and Y(and more) side-by-side
   -h, --help                             Show this help message
- 
+``` 
