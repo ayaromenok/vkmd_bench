@@ -1,3 +1,7 @@
+# VulKan Multi-Device benchmark
+
+Vulkan benchmark which allow to test devices side-by-side. Originally intended to evaluate NVidia CMP HS series with consumer market devices
+
 ### Intro
 
 Small Vulkan benchmark
