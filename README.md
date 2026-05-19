@@ -26,7 +26,7 @@ Running benchmarks on Device 2...
 
 #### Multi Device Results: MUL FP16
 
-| Matrix Size | Device 0 (NVIDIA RTX A4000) [GFLOPS] | Device 2 (NVIDIA CMP 70HX) [GFLOPS] | Device 4 (AMD Radeon Graphics (RADV RENOIR)) [GFLOPS] |
+| Matrix Size | NVIDIA A4000, GFLOPS | NVIDIA 70HX, GFLOPS | AMD Vega7, GFLOPS |
 | :--- | :---: | :---: | :---: |
 | 256 x 256 | 87.855 | 24.026 | 88.362 |
 | 512 x 512 | 132.055 | 63.706 | 101.174 |
