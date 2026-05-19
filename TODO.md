@@ -2,3 +2,4 @@
 - add pause between tests for cool-down device
 - add version to app based on git hash, # of commits and build date. store it to output files too.
 - make test with Vega7 with RAM bandwidth around 25.8 (~DDR1600)
+- memory bendwidth test Device to Device, Device to Host
