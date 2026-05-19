@@ -37,9 +37,9 @@ Running benchmarks on Device 2...
 
 |name|SM| fp16, GFLOPS | fp32,GFLOPS | RAM badwidth|
 |---|---|---|---|---|
-|HX|3840|1612|1612|~25.8|
-|A4|6144|2580|2580|~25.8|
-|V7|448| 3404|1702|~56|
+|HX|3840|1612|1612|~18.7|
+|A4|6144|2580|2580|~18.7|
+|V7|448| 3404|1702|~22.5|
 
 |chip|name|short name| fp16, GFLOPS | fp32,GFLOPS 
 |---|---|---|---|---|
