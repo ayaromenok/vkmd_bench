@@ -144,7 +144,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     const char* type_str = "FP16";
     const char* perf_label = "GFLOPS";
     size_t elementSize = 2;
-    const char* shaderFile = "matmul_fp16.spv";
+    const char* shaderFile = "shaders/matmul_fp16.spv";
     switch(args.data_type) {
         case DT_FP16: type_str = "FP16"; perf_label = "GFLOPS"; elementSize = 2; break;
         case DT_INT16: type_str = "INT16"; perf_label = "GOPS"; elementSize = 2; break;
@@ -167,10 +167,10 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     if (is_elemop) {
         const char* op_names[] = {"mul", "add", "sub", "div", "mad"};
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
-        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
     } else {
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
-        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "matmul_%s.spv", dt_names[args.data_type]);
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/matmul_%s.spv", dt_names[args.data_type]);
     }
     shaderFile = shaderFileBuf;
 

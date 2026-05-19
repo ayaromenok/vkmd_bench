@@ -17,9 +17,10 @@ foreach(op_idx RANGE 0 4)
     foreach(dt_idx RANGE 0 3)
         list(GET DATA_TYPES ${dt_idx} dt_name)
         list(GET DATA_TYPE_GLSL ${dt_idx} dt_glsl)
-        set(spv_name "${op_name}_${dt_name}.spv")
+        set(spv_name "shaders/${op_name}_${dt_name}.spv")
         add_custom_command(
             OUTPUT ${spv_name}
+            COMMAND ${CMAKE_COMMAND} -E make_directory shaders
             COMMAND glslc -DDATA_TYPE=${dt_glsl} -DOP_TYPE=${op_id} ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shader.comp -o ${spv_name}
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shader.comp
             COMMENT "Compiling ${op_name} ${dt_name} shader"
