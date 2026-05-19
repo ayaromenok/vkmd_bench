@@ -24,16 +24,28 @@ Configuring Device 2 (CMP 70HX) profile: "2_210_405"
 Running benchmarks on Device 2...
 ```
 
-#### Dual Benchmark Results: MUL FP16
+#### Multi Device Results: MUL FP16
 
-| Matrix Size | Device 0 (RTX A4000) [GFLOPS] | Device 2 (CMP 70HX) [GFLOPS] |
-| :--- | :---: | :---: |
-| 256 x 256 | 91.148 | 24.054 |
-| 512 x 512 | 130.216 | 67.298 |
-| 768 x 768 | 142.123 | 84.150 |
-| 1024 x 1024 | 138.231 | 88.284 |
+| Matrix Size | Device 0 (NVIDIA RTX A4000) [GFLOPS] | Device 2 (NVIDIA CMP 70HX) [GFLOPS] | Device 4 (AMD Radeon Graphics (RADV RENOIR)) [GFLOPS] |
+| :--- | :---: | :---: | :---: |
+| 256 x 256 | 87.855 | 24.026 | 88.362 |
+| 512 x 512 | 132.055 | 63.706 | 101.174 |
+| 768 x 768 | 140.372 | 82.315 | 81.207 |
+| 1024 x 1024 | 144.080 | 87.604 | 77.426 |
 
+##### Test Hardware
 
+|name|SM| fp16, GFLOPS | fp32,GFLOPS | RAM badwidth|
+|---|---|---|---|---|
+|HX|3840|1612|1612|~25.8|
+|A4|6144|2580|2580|~25.8|
+|V7|448| 3404|1702|~56|
+
+|chip|name|short name| fp16, GFLOPS | fp32,GFLOPS 
+|---|---|---|---|---|
+|[Ampere](https://www.techpowerup.com/gpu-specs/?architecture=Ampere) [GA104](https://www.techpowerup.com/gpu-specs/nvidia-ga104.g964) | [NVIDIA CMP 70HX](https://www.techpowerup.com/gpu-specs/cmp-70hx.c3822)| HX | 10 710 |  10 710 | 
+|[Ampere](https://www.techpowerup.com/gpu-specs/?architecture=Ampere) [GA104](https://www.techpowerup.com/gpu-specs/nvidia-ga104.g964) | [NVIDIA Quadro RTX A4000](https://www.techpowerup.com/gpu-specs/rtx-a4000.c3756)| A4 | 19 170 | 19 170 |
+|[GCN5](https://www.techpowerup.com/gpu-specs/?architecture=GCN%205.0)|[Cezanne/Vega7](https://www.techpowerup.com/cpu-specs/ryzen-5-5600g.c2471)| V7 | ||
 ### Options
 
 ```
