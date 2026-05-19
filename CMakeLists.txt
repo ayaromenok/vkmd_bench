@@ -20,15 +20,15 @@ foreach(op_idx RANGE 0 4)
         set(spv_name "${op_name}_${dt_name}.spv")
         add_custom_command(
             OUTPUT ${spv_name}
-            COMMAND glslc -DDATA_TYPE=${dt_glsl} -DOP_TYPE=${op_id} ${CMAKE_CURRENT_SOURCE_DIR}/shader.comp -o ${spv_name}
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shader.comp
+            COMMAND glslc -DDATA_TYPE=${dt_glsl} -DOP_TYPE=${op_id} ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shader.comp -o ${spv_name}
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shader.comp
             COMMENT "Compiling ${op_name} ${dt_name} shader"
         )
         list(APPEND ALL_SPVS ${spv_name})
     endforeach()
 endforeach()
 
-add_executable(vkmdbench main.c args.c
+add_executable(vkmdbench src/main.c src/args.c
     ${ALL_SPVS}
 )
 
