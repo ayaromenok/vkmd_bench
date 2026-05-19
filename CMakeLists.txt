@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(vulkan_matmul_fp16 C)
+project(vkmdbench C)
 
 find_package(Vulkan REQUIRED)
 
@@ -28,11 +28,11 @@ foreach(op_idx RANGE 0 4)
     endforeach()
 endforeach()
 
-add_executable(matmul_vk main.c args.c
+add_executable(vkmdbench main.c args.c
     ${ALL_SPVS}
 )
 
-target_include_directories(matmul_vk PRIVATE ${Vulkan_INCLUDE_DIRS})
-target_link_libraries(matmul_vk PRIVATE ${Vulkan_LIBRARIES})
+target_include_directories(vkmdbench PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_link_libraries(vkmdbench PRIVATE ${Vulkan_LIBRARIES})
 
 # Copy spv to build dir if needed (it's already there because of add_custom_command output)

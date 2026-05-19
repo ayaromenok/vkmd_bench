@@ -132,7 +132,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
 
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "Vulkan MatMul FP16",
+        .pApplicationName = "vkmdbench",
         .apiVersion = VK_API_VERSION_1_1,
     };
 
