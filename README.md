@@ -45,7 +45,7 @@ Running benchmarks on Device 2...
 |---|---|---|---|---|
 |[Ampere](https://www.techpowerup.com/gpu-specs/?architecture=Ampere) [GA104](https://www.techpowerup.com/gpu-specs/nvidia-ga104.g964) | [NVIDIA CMP 70HX](https://www.techpowerup.com/gpu-specs/cmp-70hx.c3822)| HX | 10 710 |  10 710 | 
 |[Ampere](https://www.techpowerup.com/gpu-specs/?architecture=Ampere) [GA104](https://www.techpowerup.com/gpu-specs/nvidia-ga104.g964) | [NVIDIA Quadro RTX A4000](https://www.techpowerup.com/gpu-specs/rtx-a4000.c3756)| A4 | 19 170 | 19 170 |
-|[GCN5](https://www.techpowerup.com/gpu-specs/?architecture=GCN%205.0)|[Cezanne/Vega7](https://www.techpowerup.com/cpu-specs/ryzen-5-5600g.c2471)| V7 | ||
+|[GCN5](https://www.techpowerup.com/gpu-specs/?architecture=GCN%205.0)|[Cezanne/Vega7](https://www.techpowerup.com/cpu-specs/ryzen-5-5600g.c2471)| V7 | 3404 |	1702 |
 ### Options
 
 ```
