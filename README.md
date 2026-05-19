@@ -40,7 +40,7 @@ Running benchmarks on Device 2...
 |HX|3840|1612|1612|~18.7|
 |A4|6144|2580|2580|~18.7|
 |V7|448| 3404|1702|~22.5|
-|llvpipe| | | 16.2|
+|llvpipe| | | | 16.2|
 
 RAM/VRAM bandwidth measured with [memtest_vulkan](https://github.com/GpuZelenograd/memtest_vulkan)
 
