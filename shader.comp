@@ -2,15 +2,19 @@
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : enable
 #extension GL_EXT_shader_explicit_arithmetic_types_int16 : enable
 
-layout(local_size_x = 256) in;
-
 #ifndef DATA_TYPE
 #define DATA_TYPE float16_t
 #endif
 
-// OP_TYPE: 0=add, 1=sub, 2=div, 3=mad
+// OP_TYPE: 0=matmul (MUL), 1=add, 2=sub, 3=div, 4=mad
 #ifndef OP_TYPE
 #define OP_TYPE 0
+#endif
+
+#if OP_TYPE == 0
+layout(local_size_x = 16, local_size_y = 16) in;
+#else
+layout(local_size_x = 256) in;
 #endif
 
 layout(set = 0, binding = 0) buffer MatrixA {
@@ -28,26 +32,43 @@ layout(set = 0, binding = 2) buffer MatrixC {
 layout(push_constant) uniform PushConstants {
     uint M;
     uint N;
-    uint K;  // unused for element-wise, kept for compatibility
+    uint K;
 } pc;
 
 void main() {
+#if OP_TYPE == 0
+    // Matrix Multiplication
+    uint row = gl_GlobalInvocationID.y;
+    uint col = gl_GlobalInvocationID.x;
+
+    if (row >= pc.M || col >= pc.N) return;
+
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
+    }
+
+    c.data[row * pc.N + col] = sum;
+#else
+    // Element-wise operations
     uint idx = gl_GlobalInvocationID.x;
     uint total = pc.M * pc.N;
 
     if (idx >= total) return;
 
-#if OP_TYPE == 0
+#if OP_TYPE == 1
     // Addition: C = A + B
     c.data[idx] = a.data[idx] + b.data[idx];
-#elif OP_TYPE == 1
+#elif OP_TYPE == 2
     // Subtraction: C = A - B
     c.data[idx] = a.data[idx] - b.data[idx];
-#elif OP_TYPE == 2
+#elif OP_TYPE == 3
     // Division: C = A / B
     c.data[idx] = a.data[idx] / b.data[idx];
-#elif OP_TYPE == 3
+#elif OP_TYPE == 4
     // MAD: C = A * B + A  (multiply and add)
     c.data[idx] = a.data[idx] * b.data[idx] + a.data[idx];
+#endif
+
 #endif
 }
