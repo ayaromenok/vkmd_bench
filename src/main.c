@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <vulkan/vulkan.h>
 #include "args.h"
+#include <sys/stat.h>
+#include <sys/types.h>
 
 //it's not a WG size from GPU
 #define WORKGROUP_SIZE 16
@@ -493,15 +495,15 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     // If dual bench is requested, main() will do the side-by-side CSV writing.
     if (args.save_csv && !args.multi_bench) {
         FILE* pipe = popen("lact cli profile", "r");
-        char filename[256] = "results.csv";
+        char filename[256] = "output/results.csv";
         if (pipe) {
             char buffer[128];
             if (fgets(buffer, 128, pipe)) {
                 size_t len = strlen(buffer);
                 while (len > 0 && (buffer[len-1] == '\n' || buffer[len-1] == '\r')) {
-                    buffer[--len] = '\0';
+                     buffer[--len] = '\0';
                 }
-                snprintf(filename, sizeof(filename), "%s_%s.csv", buffer, type_str);
+                snprintf(filename, sizeof(filename), "output/%s_%s.csv", buffer, type_str);
             }
             pclose(pipe);
         }
@@ -653,6 +655,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
 
 int main(int argc, char** argv) {
     AppArgs args = parse_args(argc, argv);
+    mkdir("output", 0777);
 
     if (args.list_devices) {
         uint32_t count = 0;
@@ -792,7 +795,7 @@ int main(int argc, char** argv) {
             // Save CSV side-by-side if required
             if (temp_args.save_csv) {
                 char filename[256];
-                snprintf(filename, sizeof(filename), "multi_bench_%s_%s.csv", op_str, type_str);
+                snprintf(filename, sizeof(filename), "output/multi_bench_%s_%s.csv", op_str, type_str);
                 FILE* csv_file = fopen(filename, "w");
                 if (csv_file) {
                     fprintf(csv_file, "Operator: %s\n", op_str);
