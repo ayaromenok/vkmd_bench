@@ -63,5 +63,6 @@ Why DDR6 and DDR6X give differne speed with same settings?
   -o, --operator <op>                    Select operator: mul, add, sub, div, mad, mat-mul, mat-add, mat-sub, mat-div, mat-mad (default: mul)
   -csv, --save-csv                       Save results to CSV file
   -mdb, --multi-device-bench             Benchmark device X and Y(and more) side-by-side
+  -dm, --dimention <1|2|3>               Set matrix dimension: 1D, 2D, or 3D (default: 2)
   -h, --help                             Show this help message
 ``` 

@@ -1,5 +1,7 @@
+- add 1D and 3D matrices
+- add duration of tests in seconds (optionally) additionally to iterations count
+- read power usage and temp of GPU during test run using nvidia-smi (or rocm-smi on AMD)
+- read gpu/vram clocks and utilization during test run (nvidia-smi or rocm-smi)
+
+
 - separate ini file to settins.ini and benchmark.ini
-- [x] add pause between tests for cool-down device
-- [x] add version to app based on git hash, # of commits and build date. store it to output files too.
-- [x] make test with Vega7 with RAM bandwidth around 25.8 (~DDR1600)
-- [x] output to terminal name of test(device, operator, data type) before run it (update to "Running benchmarks on Device 0 (NVIDIA RTX A4000)..." )

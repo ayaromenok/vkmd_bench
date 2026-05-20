@@ -49,6 +49,7 @@ typedef struct {
     uint32_t multi_data_type_count;
     
     uint32_t pause_sec;
+    uint32_t dimension;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);

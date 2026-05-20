@@ -7,12 +7,23 @@
 #define DATA_TYPE float16_t
 #endif
 
-// OP_TYPE: 0=mul, 1=add, 2=sub, 3=div, 4=mad
+// OP_TYPE: 0=mul, 1=add, 2=sub, 3=div, 4=mad, 5=matmul, 6=matadd, 7=matsub, 8=matdiv, 9=matmad
 #ifndef OP_TYPE
 #define OP_TYPE 0
 #endif
 
-layout(local_size_x = 16, local_size_y = 16) in;
+// DIMENSION: 1, 2, 3
+#ifndef DIMENSION
+#define DIMENSION 2
+#endif
+
+#if DIMENSION == 1
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+#elif DIMENSION == 2
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+#elif DIMENSION == 3
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+#endif
 
 layout(set = 0, binding = 0) buffer MatrixA {
     DATA_TYPE data[];
@@ -33,63 +44,122 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 void main() {
+#if DIMENSION == 1
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.M) return;
+#elif DIMENSION == 2
     uint row = gl_GlobalInvocationID.y;
     uint col = gl_GlobalInvocationID.x;
-
     if (row >= pc.M || col >= pc.N) return;
-
     uint idx = row * pc.N + col;
+#elif DIMENSION == 3
+    uint batch = gl_GlobalInvocationID.z;
+    uint row = gl_GlobalInvocationID.y;
+    uint col = gl_GlobalInvocationID.x;
+    if (batch >= pc.M || row >= pc.M || col >= pc.N) return;
+    uint idx = batch * pc.M * pc.N + row * pc.N + col;
+#endif
 
 #if OP_TYPE == 0
-    // MUL: C = A * B  (multiply)
     c.data[idx] = a.data[idx] * b.data[idx];
 #elif OP_TYPE == 1
-    // Addition: C = A + B
     c.data[idx] = a.data[idx] + b.data[idx];
 #elif OP_TYPE == 2
-    // Subtraction: C = A - B
     c.data[idx] = a.data[idx] - b.data[idx];
 #elif OP_TYPE == 3
-    // Division: C = A / B
     c.data[idx] = a.data[idx] / b.data[idx];
 #elif OP_TYPE == 4
-    // MAD: C = A * B + A  (multiply and add)
     c.data[idx] = a.data[idx] * b.data[idx] + a.data[idx];
+
 #elif OP_TYPE == 5    
     // Matrix Multiplication
-   DATA_TYPE sum = DATA_TYPE(0);
-   for (uint k = 0; k < pc.K; k++) {
-       sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
-   }
-   c.data[idx] = sum;    
+#if DIMENSION == 1
+    c.data[idx] = a.data[idx] * b.data[idx];
+#elif DIMENSION == 2
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#elif DIMENSION == 3
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[batch * pc.M * pc.K + row * pc.K + k] * b.data[batch * pc.K * pc.N + k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#endif
+
 #elif OP_TYPE == 6
     // Matrix Addition
-   DATA_TYPE sum = DATA_TYPE(0);
-   for (uint k = 0; k < pc.K; k++) {
-       sum += a.data[row * pc.K + k] + b.data[k * pc.N + col];
-   }
-   c.data[idx] = sum;    
+#if DIMENSION == 1
+    c.data[idx] = a.data[idx] + b.data[idx];
+#elif DIMENSION == 2
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] + b.data[k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#elif DIMENSION == 3
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[batch * pc.M * pc.K + row * pc.K + k] + b.data[batch * pc.K * pc.N + k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#endif
+
 #elif OP_TYPE == 7
     // Matrix Subtraction
-   DATA_TYPE sum = DATA_TYPE(0);
-   for (uint k = 0; k < pc.K; k++) {
-       sum += a.data[row * pc.K + k] - b.data[k * pc.N + col];
-   }
-   c.data[idx] = sum;    
+#if DIMENSION == 1
+    c.data[idx] = a.data[idx] - b.data[idx];
+#elif DIMENSION == 2
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] - b.data[k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#elif DIMENSION == 3
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[batch * pc.M * pc.K + row * pc.K + k] - b.data[batch * pc.K * pc.N + k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#endif
+
 #elif OP_TYPE == 8
     // Matrix Division
-   DATA_TYPE sum = DATA_TYPE(0);
-   for (uint k = 0; k < pc.K; k++) {
-       sum += a.data[row * pc.K + k] / b.data[k * pc.N + col];
-   }
-   c.data[idx] = sum;    
+#if DIMENSION == 1
+    c.data[idx] = a.data[idx] / b.data[idx];
+#elif DIMENSION == 2
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] / b.data[k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#elif DIMENSION == 3
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[batch * pc.M * pc.K + row * pc.K + k] / b.data[batch * pc.K * pc.N + k * pc.N + col];
+    }
+    c.data[idx] = sum;    
+#endif
+
 #elif OP_TYPE == 9   
     // Matrix MAD
-   DATA_TYPE sum = DATA_TYPE(0);
-   for (uint k = 0; k < pc.K; k++) {
-       sum += a.data[row * pc.K + k] * b.data[k * pc.N + col] + a.data[row * pc.K + k];
-   }
-   c.data[idx] = sum;    
+#if DIMENSION == 1
+    c.data[idx] = a.data[idx] * b.data[idx] + a.data[idx];
+#elif DIMENSION == 2
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[row * pc.K + k] * b.data[k * pc.N + col] + a.data[row * pc.K + k];
+    }
+    c.data[idx] = sum;    
+#elif DIMENSION == 3
+    DATA_TYPE sum = DATA_TYPE(0);
+    for (uint k = 0; k < pc.K; k++) {
+        sum += a.data[batch * pc.M * pc.K + row * pc.K + k] * b.data[batch * pc.K * pc.N + k * pc.N + col] + a.data[batch * pc.M * pc.K + row * pc.K + k];
+    }
+    c.data[idx] = sum;    
+#endif
 
 #endif
 }

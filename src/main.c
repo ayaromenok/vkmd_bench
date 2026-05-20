@@ -213,15 +213,17 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
 
     // Select shader file based on operator + data type
     char shaderFileBuf[64];
+    const char* dim_suffixes[] = {"", "1d", "2d", "3d"};
+    const char* dim_suffix = dim_suffixes[args.dimension];
     if (is_elemop) {
         const char* op_names[] = {"mul", "add", "sub", "div", "mad"};
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32", "int8"};
-        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type], dim_suffix);
     } else {
         const char* op_names[] = {"matmul", "matadd", "matsub", "matdiv", "matmad"};
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32", "int8"};
 //check args.operator_type
-        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type - 5], dt_names[args.data_type]);
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s_%s.spv", op_names[args.operator_type - 5], dt_names[args.data_type], dim_suffix);
     }
     shaderFile = shaderFileBuf;
 
@@ -363,7 +365,18 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     VkQueue queue;
     vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
 
-    size_t matrixSize = (size_t)N_SIZE * N_SIZE * elementSize;
+    size_t matrixSize;
+    size_t totalElements;
+    if (args.dimension == 1) {
+        matrixSize = (size_t)N_SIZE * elementSize;
+        totalElements = (size_t)N_SIZE;
+    } else if (args.dimension == 2) {
+        matrixSize = (size_t)N_SIZE * N_SIZE * elementSize;
+        totalElements = (size_t)N_SIZE * N_SIZE;
+    } else {
+        matrixSize = (size_t)N_SIZE * N_SIZE * N_SIZE * elementSize;
+        totalElements = (size_t)N_SIZE * N_SIZE * N_SIZE;
+    }
     VkBuffer bufferA, bufferB, bufferC;
     VkDeviceMemory memoryA, memoryB, memoryC;
 
@@ -393,35 +406,35 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     if (args.data_type == DT_FP16) {
         uint16_t* hA = (uint16_t*)dataA_mapped;
         uint16_t* hB = (uint16_t*)dataB_mapped;
-        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+        for (uint32_t i = 0; i < totalElements; i++) {
             hA[i] = float32_to_float16(1.0f);
             hB[i] = float32_to_float16(2.0f);
         }
     } else if (args.data_type == DT_INT16) {
         int16_t* iA = (int16_t*)dataA_mapped;
         int16_t* iB = (int16_t*)dataB_mapped;
-        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+        for (uint32_t i = 0; i < totalElements; i++) {
             iA[i] = 1;
             iB[i] = 2;
         }
     } else if (args.data_type == DT_FP32) {
         float* fA = (float*)dataA_mapped;
         float* fB = (float*)dataB_mapped;
-        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+        for (uint32_t i = 0; i < totalElements; i++) {
             fA[i] = 1.0f;
             fB[i] = 2.0f;
         }
     } else if (args.data_type == DT_INT32) {
         int32_t* iA = (int32_t*)dataA_mapped;
         int32_t* iB = (int32_t*)dataB_mapped;
-        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+        for (uint32_t i = 0; i < totalElements; i++) {
             iA[i] = 1;
             iB[i] = 2;
         }
     } else if (args.data_type == DT_INT8) {
         int8_t* iA = (int8_t*)dataA_mapped;
         int8_t* iB = (int8_t*)dataB_mapped;
-        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+        for (uint32_t i = 0; i < totalElements; i++) {
             iA[i] = 1;
             iB[i] = 2;
         }
@@ -559,7 +572,8 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     // If dual bench is requested, main() will do the side-by-side CSV writing.
     if (args.save_csv && !args.multi_bench) {
         FILE* pipe = popen("lact cli profile", "r");
-        char filename[256] = "output/results.csv";
+        char filename[256];
+        snprintf(filename, sizeof(filename), "output/results_%s_%s_%dD.csv", op_str, type_str, args.dimension);
         if (pipe) {
             char buffer[128];
             if (fgets(buffer, 128, pipe)) {
@@ -567,7 +581,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
                 while (len > 0 && (buffer[len-1] == '\n' || buffer[len-1] == '\r')) {
                      buffer[--len] = '\0';
                 }
-                snprintf(filename, sizeof(filename), "output/%s_%s.csv", buffer, type_str);
+                snprintf(filename, sizeof(filename), "output/%s_%s_%s_%dD.csv", buffer, op_str, type_str, args.dimension);
             }
             pclose(pipe);
         }
@@ -578,6 +592,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
             fprintf(csv_file, "Version: %s\n", version);
             fprintf(csv_file, "Operator: %s\n", op_str);
             fprintf(csv_file, "DataType: %s\n", type_str);
+            fprintf(csv_file, "Dimension: %dD\n", args.dimension);
             fprintf(csv_file, "LACT Profile: %s\n", args.lact_profile);
             fprintf(csv_file, "Matrix Size,Performance (%s)\n", perf_label);
             if (!silent) printf("Saving results to %s\n", filename);
@@ -635,7 +650,13 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
         PushConstants pc = {current_n, current_n, current_n};
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-        vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
+        if (args.dimension == 1) {
+            vkCmdDispatch(commandBuffer, (current_n + 255) / 256, 1, 1);
+        } else if (args.dimension == 2) {
+            vkCmdDispatch(commandBuffer, (current_n + 15) / 16, (current_n + 15) / 16, 1);
+        } else {
+            vkCmdDispatch(commandBuffer, (current_n + 7) / 8, (current_n + 7) / 8, (current_n + 7) / 8);
+        }
         vkEndCommandBuffer(commandBuffer);
 
         // Warm-up
@@ -655,18 +676,36 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         double avg_time = total_time / count;
         double gops;
         if (is_elemop) {
-            // Element-wise: N*N operations (MAD counts as 2 ops)
             double ops_per_element = (args.operator_type == OP_MAD) ? 2.0 : 1.0;
-            gops = (ops_per_element * (double)current_n * current_n) / (avg_time * 1e9);
+            double elements;
+            if (args.dimension == 1) elements = (double)current_n;
+            else if (args.dimension == 2) elements = (double)current_n * current_n;
+            else elements = (double)current_n * current_n * current_n;
+            gops = (ops_per_element * elements) / (avg_time * 1e9);
         } else {
-            // MatMul: 2*N^3 operations
-            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+            // MatMul operations
+            if (args.dimension == 1) {
+                gops = (double)current_n / (avg_time * 1e9);
+            } else if (args.dimension == 2) {
+                gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+            } else {
+                // Batch MatMul: N * (2.0 * N^3)
+                gops = (2.0 * (double)current_n * current_n * current_n * current_n) / (avg_time * 1e9);
+            }
         }
 //todo - add verbose level - this one is +1
-        if (!silent) {
-            printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
+//        if (!silent) {
+            if (args.dimension == 1) {
+                printf("| %4u | %12.3f |\n", current_n, gops);
+            }
+            else if (args.dimension == 2){
+                printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
+            }
+            else {
+                printf("| %4u x %-4u x %-4u | %12.3f |\n", current_n, current_n, current_n, gops);
+            }
             fflush(stdout);
-        }
+//        }
 
         if (step_idx < step_count) {
             results[step_idx++] = gops;
@@ -853,7 +892,7 @@ int main(int argc, char** argv) {
                 const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";
                 printf("%s%s", profile, (d + 1 < temp_args.multi_device_count) ? ", " : "");
             }
-            printf("\n### Multi Benchmark Results: %s %s\n\n", op_str, type_str);
+            printf("\n### Multi Benchmark Results: %s %s (%dD)\n\n", op_str, type_str, temp_args.dimension);
             printf("| Matrix Size");
             for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
                 printf(" | Device %u (%s) [%s]", temp_args.multi_devices[d], device_names[d], perf_label);
@@ -868,7 +907,15 @@ int main(int argc, char** argv) {
 
             uint32_t n = temp_args.matrix_start_size;
             for (uint32_t i = 0; i < counts[0]; i++) {
-                printf("| %u x %u", n, n);
+                if (args.dimension == 1){
+                   printf("| %u", n);
+                }
+                else if (args.dimension == 2){
+                    printf("| %u x %u", n, n);}
+                else {
+                    printf("| %u x %u x %u", n, n, n);
+                }
+                
                 for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
                     printf(" | %.3f", results[d][i]);
                 }
@@ -884,7 +931,7 @@ int main(int argc, char** argv) {
             // Save CSV side-by-side if required
             if (temp_args.save_csv) {
                 char filename[256];
-                snprintf(filename, sizeof(filename), "output/multi_bench_%s_%s.csv", op_str, type_str);
+                snprintf(filename, sizeof(filename), "output/multi_bench_%s_%s_%dD.csv", op_str, type_str, temp_args.dimension);
                 FILE* csv_file = fopen(filename, "w");
                 if (csv_file) {
                     char version[128];
@@ -892,6 +939,7 @@ int main(int argc, char** argv) {
                     fprintf(csv_file, "Version: %s\n", version);
                     fprintf(csv_file, "Operator: %s\n", op_str);
                     fprintf(csv_file, "DataType: %s\n", type_str);
+                    fprintf(csv_file, "Dimension: %dD\n", temp_args.dimension);
                     fprintf(csv_file, "LACT Profiles: ");
                     for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
                         const char* profile = (d < temp_args.multi_profile_count) ? temp_args.multi_profiles[d] : "default";

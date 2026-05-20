@@ -152,6 +152,11 @@ static void load_from_ini(AppArgs* args, const char* filepath) {
             parse_profiles(args, val);
         } else if (strcmp(key, "pause") == 0 || strcmp(key, "p") == 0) {
             args->pause_sec = atoi(val);
+        } else if (strcmp(key, "dimension") == 0 || strcmp(key, "dimention") == 0 || strcmp(key, "dm") == 0) {
+            int d_val = atoi(val);
+            if (d_val == 1 || d_val == 2 || d_val == 3) {
+                args->dimension = d_val;
+            }
         }
     }
     fclose(file);
@@ -172,7 +177,8 @@ AppArgs parse_args(int argc, char** argv) {
         .operator_type = OP_MUL,
         .multi_operator_count = 0,
         .multi_data_type_count = 0,
-        .pause_sec = 0
+        .pause_sec = 0,
+        .dimension = 2
     };
     
     // Load options from settings.ini if present, which can then be overridden by cmd line args
@@ -248,6 +254,19 @@ AppArgs parse_args(int argc, char** argv) {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
             }
+        } else if (strcmp(argv[i], "-dm") == 0 || strcmp(argv[i], "--dimention") == 0 || strcmp(argv[i], "--dimension") == 0) {
+            if (i + 1 < argc) {
+                int val = atoi(argv[++i]);
+                if (val == 1 || val == 2 || val == 3) {
+                    args.dimension = val;
+                } else {
+                    fprintf(stderr, "Error: Matrix dimension must be 1, 2, or 3\n");
+                    exit(1);
+                }
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -263,6 +282,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -mdb, --multi-device-bench             Benchmark device 0 and 2 side-by-side\n");
             printf("  -l, --lact <profile>                   Set LACT profile name string (default: 0_210_405 (device_GPU_VRAM frequency)\n");
             printf("  -p, --pause <seconds>                  Set pause between tests in seconds (default: 0)\n");
+            printf("  -dm, --dimention <1|2|3>               Set matrix dimension: 1D, 2D, or 3D (default: 2)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
         } else {
