@@ -41,6 +41,27 @@ static void get_device_name(uint32_t device_index, char* out_name, size_t max_le
     }
 }
 
+static const char* get_operator_name(OperatorType op) {
+    switch (op) {
+        case OP_MUL: return "MUL";
+        case OP_ADD: return "ADD";
+        case OP_SUB: return "SUB";
+        case OP_DIV: return "DIV";
+        case OP_MAD: return "MAD";
+        default: return "UNKNOWN";
+    }
+}
+
+static const char* get_datatype_name(DataType dt) {
+    switch (dt) {
+        case DT_FP16: return "FP16";
+        case DT_INT16: return "INT16";
+        case DT_FP32: return "FP32";
+        case DT_INT32: return "INT32";
+        default: return "UNKNOWN";
+    }
+}
+
 // Simple float32 to float16 conversion (IEEE 754)
 uint16_t float32_to_float16(float f) {
     uint32_t i = *(uint32_t*)&f;
@@ -229,7 +250,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     VkPhysicalDeviceProperties deviceProps;
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProps);
     if (!silent) {
-        printf("Using device [%u]: %s\n", target_device, deviceProps.deviceName);
+        printf("Running benchmarks on Device %u (%s) - %s %s...\n", target_device, deviceProps.deviceName, op_str, type_str);
     }
 
     VkPhysicalDeviceMemoryProperties deviceMemProps;
@@ -714,7 +735,7 @@ int main(int argc, char** argv) {
                     fflush(stdout);
                 }
                 
-                printf("Running benchmarks on Device %u (%s)...\n", dev_idx, device_names[d]);
+                printf("Running benchmarks on Device %u (%s) - %s %s...\n", dev_idx, device_names[d], get_operator_name(temp_args.operator_type), get_datatype_name(temp_args.data_type));
                 fflush(stdout);
                 
                 results[d] = run_benchmark_on_device(temp_args, dev_idx, 1, &counts[d]);
