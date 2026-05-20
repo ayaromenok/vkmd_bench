@@ -144,6 +144,8 @@ static void load_from_ini(AppArgs* args, const char* filepath) {
             args->multi_bench = (strcmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcmp(val, "yes") == 0);
         } else if (strcmp(key, "lact") == 0 || strcmp(key, "l") == 0) {
             parse_profiles(args, val);
+        } else if (strcmp(key, "pause") == 0 || strcmp(key, "p") == 0) {
+            args->pause_sec = atoi(val);
         }
     }
     fclose(file);
@@ -163,7 +165,8 @@ AppArgs parse_args(int argc, char** argv) {
         .data_type = DT_FP16,
         .operator_type = OP_MUL,
         .multi_operator_count = 0,
-        .multi_data_type_count = 0
+        .multi_data_type_count = 0,
+        .pause_sec = 0
     };
     
     // Load options from settings.ini if present, which can then be overridden by cmd line args
@@ -232,6 +235,13 @@ AppArgs parse_args(int argc, char** argv) {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
             }
+        } else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--pause") == 0) {
+            if (i + 1 < argc) {
+                args.pause_sec = atoi(argv[++i]);
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -246,6 +256,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -csv, --save-csv                       Save results to CSV file\n");
             printf("  -mdb, --multi-device-bench             Benchmark device 0 and 2 side-by-side\n");
             printf("  -l, --lact <profile>                   Set LACT profile name string (default: 210_405)\n");
+            printf("  -p, --pause <seconds>                  Set pause between tests in seconds (default: 0)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
         } else {

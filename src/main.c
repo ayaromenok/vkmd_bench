@@ -696,6 +696,13 @@ int main(int argc, char** argv) {
                 if (res) {
                     free(res);
                 }
+                if (args.pause_sec > 0) {
+                    if (op_idx + 1 < args.multi_operator_count || dt_idx + 1 < args.multi_data_type_count) {
+                        printf("Cooling down device for %u seconds...\n", args.pause_sec);
+                        fflush(stdout);
+                        sleep(args.pause_sec);
+                    }
+                }
             }
         }
         return 0;
@@ -753,6 +760,16 @@ int main(int argc, char** argv) {
                         if (results[k]) free(results[k]);
                     }
                     return 1;
+                }
+
+                if (args.pause_sec > 0) {
+                    if (d + 1 < temp_args.multi_device_count || 
+                        op_idx + 1 < args.multi_operator_count || 
+                        dt_idx + 1 < args.multi_data_type_count) {
+                        printf("Cooling down device for %u seconds...\n", args.pause_sec);
+                        fflush(stdout);
+                        sleep(args.pause_sec);
+                    }
                 }
             }
 

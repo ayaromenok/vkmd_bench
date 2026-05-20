@@ -1,5 +1,5 @@
-- separate ini file to settins.ini and banchmark.ini
-- add pause between tests for cool-down device
+- separate ini file to settins.ini and benchmark.ini
+- [x] add pause between tests for cool-down device
 - add version to app based on git hash, # of commits and build date. store it to output files too.
-- make test with Vega7 with RAM bandwidth around 25.8 (~DDR1600)
+- [x] make test with Vega7 with RAM bandwidth around 25.8 (~DDR1600)
 - [x] output to terminal name of test(device, operator, data type) before run it (update to "Running benchmarks on Device 0 (NVIDIA RTX A4000)..." )
