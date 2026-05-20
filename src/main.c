@@ -62,6 +62,11 @@ static const char* get_operator_name(OperatorType op) {
         case OP_SUB: return "SUB";
         case OP_DIV: return "DIV";
         case OP_MAD: return "MAD";
+        case OP_MAT_MUL: return "MAT-MUL";
+        case OP_MAT_ADD: return "MAT-ADD";
+        case OP_MAT_SUB: return "MAT-SUB";
+        case OP_MAT_DIV: return "MAT-DIV";
+        case OP_MAT_MAD: return "MAT-MAD";
         default: return "UNKNOWN";
     }
 }
@@ -190,13 +195,18 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     }
 
     const char* op_str = "MUL";
-    int is_elemop = 0;  // 0 = matmul (2D dispatch), 1 = element-wise (1D dispatch)
+    int is_elemop = 1;  // 0 = matmul (2D dispatch), 1 = element-wise (1D dispatch)
     switch(args.operator_type) {
         case OP_MUL: op_str = "MUL"; is_elemop = 1; break;
         case OP_ADD: op_str = "ADD"; is_elemop = 1; break;
         case OP_SUB: op_str = "SUB"; is_elemop = 1; break;
         case OP_DIV: op_str = "DIV"; is_elemop = 1; break;
         case OP_MAD: op_str = "MAD"; is_elemop = 1; break;
+        case OP_MAT_MUL: op_str = "MAT-MUL"; is_elemop = 0; break;
+        case OP_MAT_ADD: op_str = "MAT-ADD"; is_elemop = 0; break;
+        case OP_MAT_SUB: op_str = "MAT-SUB"; is_elemop = 0; break;
+        case OP_MAT_DIV: op_str = "MAT-DIV"; is_elemop = 0; break;
+        case OP_MAT_MAD: op_str = "MAT-MAD"; is_elemop = 0; break;
     }
 
     // Select shader file based on operator + data type
@@ -206,8 +216,10 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
         snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
     } else {
+        const char* op_names[] = {"matmul", "matadd", "matsub", "matdiv", "matmad"};
         const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
-        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/matmul_%s.spv", dt_names[args.data_type]);
+//check args.operator_type
+        snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type - 5], dt_names[args.data_type]);
     }
     shaderFile = shaderFileBuf;
 
@@ -629,9 +641,9 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
             // Element-wise: N*N operations (MAD counts as 2 ops)
             double ops_per_element = (args.operator_type == OP_MAD) ? 2.0 : 1.0;
             gops = (ops_per_element * (double)current_n * current_n) / (avg_time * 1e9);
-//        } else {
-//            // MatMul: 2*N^3 operations
-//            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+        } else {
+            // MatMul: 2*N^3 operations
+            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
         }
 
         if (!silent) {
@@ -692,7 +704,7 @@ int main(int argc, char** argv) {
 
     char version[128];
     get_app_version(version, sizeof(version));
-    printf("Vulkan Matrix Benchmark Version: %s\n", version);
+    printf("VulKan Multi Device Benchmark version: %s\n", version);
 
     if (args.list_devices) {
         uint32_t count = 0;
@@ -810,6 +822,11 @@ int main(int argc, char** argv) {
                 case OP_SUB: op_str = "SUB"; break;
                 case OP_DIV: op_str = "DIV"; break;
                 case OP_MAD: op_str = "MAD"; break;
+                case OP_MAT_MUL: op_str = "MAT-MUL"; break;
+                case OP_MAT_ADD: op_str = "MAT-ADD"; break;
+                case OP_MAT_SUB: op_str = "MAT-SUB"; break;
+                case OP_MAT_DIV: op_str = "MAT-DIV"; break;
+                case OP_MAT_MAD: op_str = "MAT-MAD"; break;
             }
 
             // Display Markdown table side-by-side

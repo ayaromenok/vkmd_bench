@@ -15,7 +15,12 @@ typedef enum {
     OP_ADD,
     OP_SUB,
     OP_DIV,
-    OP_MAD
+    OP_MAD,
+    OP_MAT_MUL,
+    OP_MAT_ADD,
+    OP_MAT_SUB,
+    OP_MAT_DIV,
+    OP_MAT_MAD
 } OperatorType;
 
 typedef struct {

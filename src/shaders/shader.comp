@@ -6,7 +6,7 @@
 #define DATA_TYPE float16_t
 #endif
 
-// OP_TYPE: 0=matmul (MUL), 1=add, 2=sub, 3=div, 4=mad
+// OP_TYPE: 0=mul, 1=add, 2=sub, 3=div, 4=mad
 #ifndef OP_TYPE
 #define OP_TYPE 0
 #endif
@@ -40,15 +40,8 @@ void main() {
     uint idx = row * pc.N + col;
 
 #if OP_TYPE == 0
-    // Matrix Multiplication
-//    DATA_TYPE sum = DATA_TYPE(0);
-//   for (uint k = 0; k < pc.K; k++) {
-//       sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
-//   }
-//   c.data[idx] = sum;
     // MUL: C = A * B  (multiply)
     c.data[idx] = a.data[idx] * b.data[idx];
-
 #elif OP_TYPE == 1
     // Addition: C = A + B
     c.data[idx] = a.data[idx] + b.data[idx];
@@ -61,5 +54,41 @@ void main() {
 #elif OP_TYPE == 4
     // MAD: C = A * B + A  (multiply and add)
     c.data[idx] = a.data[idx] * b.data[idx] + a.data[idx];
+#elif OP_TYPE == 5    
+    // Matrix Multiplication
+   DATA_TYPE sum = DATA_TYPE(0);
+   for (uint k = 0; k < pc.K; k++) {
+       sum += a.data[row * pc.K + k] * b.data[k * pc.N + col];
+   }
+   c.data[idx] = sum;    
+#elif OP_TYPE == 6
+    // Matrix Addition
+   DATA_TYPE sum = DATA_TYPE(0);
+   for (uint k = 0; k < pc.K; k++) {
+       sum += a.data[row * pc.K + k] + b.data[k * pc.N + col];
+   }
+   c.data[idx] = sum;    
+#elif OP_TYPE == 7
+    // Matrix Subtraction
+   DATA_TYPE sum = DATA_TYPE(0);
+   for (uint k = 0; k < pc.K; k++) {
+       sum += a.data[row * pc.K + k] - b.data[k * pc.N + col];
+   }
+   c.data[idx] = sum;    
+#elif OP_TYPE == 8
+    // Matrix Division
+   DATA_TYPE sum = DATA_TYPE(0);
+   for (uint k = 0; k < pc.K; k++) {
+       sum += a.data[row * pc.K + k] / b.data[k * pc.N + col];
+   }
+   c.data[idx] = sum;    
+#elif OP_TYPE == 9   
+    // Matrix MAD
+   DATA_TYPE sum = DATA_TYPE(0);
+   for (uint k = 0; k < pc.K; k++) {
+       sum += a.data[row * pc.K + k] * b.data[k * pc.N + col] + a.data[row * pc.K + k];
+   }
+   c.data[idx] = sum;    
+
 #endif
 }

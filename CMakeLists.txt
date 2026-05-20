@@ -31,14 +31,14 @@ endif()
 string(TIMESTAMP BUILD_DATETIME "%Y%m%d%H%M")
 
 # === Unified shaders ===
-set(OPS mul add sub div mad)
-set(OP_IDS 0 1 2 3 4)
+set(OPS mul add sub div mad matmul matadd matsub matdiv matmad)
+set(OP_IDS 0 1 2 3 4 5 6 7 8 9)
 set(DATA_TYPES fp16 int16 fp32 int32)
 set(DATA_TYPE_GLSL float16_t int16_t float int)
 
 set(ALL_SPVS "")
 
-foreach(op_idx RANGE 0 4)
+foreach(op_idx RANGE 0 9)
     list(GET OPS ${op_idx} op_name)
     list(GET OP_IDS ${op_idx} op_id)
     foreach(dt_idx RANGE 0 3)

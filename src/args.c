@@ -64,8 +64,13 @@ static void parse_operators(AppArgs* args, const char* str) {
         else if (strcmp(trimmed, "sub") == 0) op = OP_SUB;
         else if (strcmp(trimmed, "div") == 0) op = OP_DIV;
         else if (strcmp(trimmed, "mad") == 0) op = OP_MAD;
+        else if (strcmp(trimmed, "mat-mul") == 0) op = OP_MAT_MUL;
+        else if (strcmp(trimmed, "mat-add") == 0) op = OP_MAT_ADD;
+        else if (strcmp(trimmed, "mat-sub") == 0) op = OP_MAT_SUB;
+        else if (strcmp(trimmed, "mat-div") == 0) op = OP_MAT_DIV;
+        else if (strcmp(trimmed, "mat-mad") == 0) op = OP_MAT_MAD;
         else {
-            fprintf(stderr, "Error: Unknown operator '%s' (use mul, add, sub, div, or mad)\n", trimmed);
+            fprintf(stderr, "Error: Unknown operator '%s' (use mul, add, sub, div, mad, mat-mul, mat-add, mat-sub, mat-div, or mat-mad)\n", trimmed);
             exit(1);
         }
         args->multi_operators[args->multi_operator_count++] = op;
