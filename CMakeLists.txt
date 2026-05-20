@@ -3,6 +3,33 @@ project(vkmdbench C)
 
 find_package(Vulkan REQUIRED)
 
+# Get git hash
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+# Get commit count
+execute_process(
+    COMMAND git rev-list --count HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_COMMIT_COUNT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(NOT GIT_HASH)
+    set(GIT_HASH "unknown")
+endif()
+if(NOT GIT_COMMIT_COUNT)
+    set(GIT_COMMIT_COUNT "0")
+endif()
+
+string(TIMESTAMP BUILD_DATETIME "%Y%m%d%H%M")
+
 # === Unified shaders ===
 set(OPS matmul add sub div mad)
 set(OP_IDS 0 1 2 3 4)
@@ -35,5 +62,11 @@ add_executable(vkmdbench src/main.c src/args.c
 
 target_include_directories(vkmdbench PRIVATE ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(vkmdbench PRIVATE ${Vulkan_LIBRARIES})
+
+target_compile_definitions(vkmdbench PRIVATE
+    APP_VERSION_HASH="${GIT_HASH}"
+    APP_VERSION_COMMIT_COUNT="${GIT_COMMIT_COUNT}"
+    APP_VERSION_BUILD_DATETIME="${BUILD_DATETIME}"
+)
 
 # Copy spv to build dir if needed (it's already there because of add_custom_command output)

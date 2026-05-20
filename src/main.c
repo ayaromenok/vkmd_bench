@@ -9,6 +9,20 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#ifndef APP_VERSION_HASH
+#define APP_VERSION_HASH "unknown"
+#endif
+#ifndef APP_VERSION_COMMIT_COUNT
+#define APP_VERSION_COMMIT_COUNT "0"
+#endif
+#ifndef APP_VERSION_BUILD_DATETIME
+#define APP_VERSION_BUILD_DATETIME "unknown"
+#endif
+
+static void get_app_version(char* buf, size_t max_len) {
+    snprintf(buf, max_len, "v0.1.%s-g%s (%s)", APP_VERSION_COMMIT_COUNT, APP_VERSION_HASH, APP_VERSION_BUILD_DATETIME);
+}
+
 //it's not a WG size from GPU
 #define WORKGROUP_SIZE 16
 #define ELEMOP_WORKGROUP_SIZE 256
@@ -530,6 +544,9 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         }
         csv_file = fopen(filename, "w");
         if (csv_file) {
+            char version[128];
+            get_app_version(version, sizeof(version));
+            fprintf(csv_file, "Version: %s\n", version);
             fprintf(csv_file, "Operator: %s\n", op_str);
             fprintf(csv_file, "DataType: %s\n", type_str);
             fprintf(csv_file, "LACT Profile: %s\n", args.lact_profile);
@@ -677,6 +694,10 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
 int main(int argc, char** argv) {
     AppArgs args = parse_args(argc, argv);
     mkdir("output", 0777);
+
+    char version[128];
+    get_app_version(version, sizeof(version));
+    printf("Vulkan Matrix Benchmark Version: %s\n", version);
 
     if (args.list_devices) {
         uint32_t count = 0;
@@ -836,6 +857,9 @@ int main(int argc, char** argv) {
                 snprintf(filename, sizeof(filename), "output/multi_bench_%s_%s.csv", op_str, type_str);
                 FILE* csv_file = fopen(filename, "w");
                 if (csv_file) {
+                    char version[128];
+                    get_app_version(version, sizeof(version));
+                    fprintf(csv_file, "Version: %s\n", version);
                     fprintf(csv_file, "Operator: %s\n", op_str);
                     fprintf(csv_file, "DataType: %s\n", type_str);
                     fprintf(csv_file, "LACT Profiles: ");
