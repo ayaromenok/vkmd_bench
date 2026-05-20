@@ -192,7 +192,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     const char* op_str = "MUL";
     int is_elemop = 0;  // 0 = matmul (2D dispatch), 1 = element-wise (1D dispatch)
     switch(args.operator_type) {
-        case OP_MUL: op_str = "MUL"; is_elemop = 0; break;
+        case OP_MUL: op_str = "MUL"; is_elemop = 1; break;
         case OP_ADD: op_str = "ADD"; is_elemop = 1; break;
         case OP_SUB: op_str = "SUB"; is_elemop = 1; break;
         case OP_DIV: op_str = "DIV"; is_elemop = 1; break;
@@ -606,12 +606,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet, 0, NULL);
         PushConstants pc = {current_n, current_n, current_n};
         vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-        if (is_elemop) {
-            uint32_t total_elements = current_n * current_n;
-            vkCmdDispatch(commandBuffer, (total_elements + ELEMOP_WORKGROUP_SIZE - 1) / ELEMOP_WORKGROUP_SIZE, 1, 1);
-        } else {
-            vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
-        }
+        vkCmdDispatch(commandBuffer, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, (current_n + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE, 1);
         vkEndCommandBuffer(commandBuffer);
 
         // Warm-up
@@ -634,9 +629,9 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
             // Element-wise: N*N operations (MAD counts as 2 ops)
             double ops_per_element = (args.operator_type == OP_MAD) ? 2.0 : 1.0;
             gops = (ops_per_element * (double)current_n * current_n) / (avg_time * 1e9);
-        } else {
-            // MatMul: 2*N^3 operations
-            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
+//        } else {
+//            // MatMul: 2*N^3 operations
+//            gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
         }
 
         if (!silent) {

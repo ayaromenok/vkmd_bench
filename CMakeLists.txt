@@ -31,7 +31,7 @@ endif()
 string(TIMESTAMP BUILD_DATETIME "%Y%m%d%H%M")
 
 # === Unified shaders ===
-set(OPS matmul add sub div mad)
+set(OPS mul add sub div mad)
 set(OP_IDS 0 1 2 3 4)
 set(DATA_TYPES fp16 int16 fp32 int32)
 set(DATA_TYPE_GLSL float16_t int16_t float int)
