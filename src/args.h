@@ -7,7 +7,8 @@ typedef enum {
     DT_FP16,
     DT_INT16,
     DT_FP32,
-    DT_INT32
+    DT_INT32,
+    DT_INT8,
 } DataType;
 
 typedef enum {

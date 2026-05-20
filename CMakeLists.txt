@@ -33,15 +33,15 @@ string(TIMESTAMP BUILD_DATETIME "%Y%m%d%H%M")
 # === Unified shaders ===
 set(OPS mul add sub div mad matmul matadd matsub matdiv matmad)
 set(OP_IDS 0 1 2 3 4 5 6 7 8 9)
-set(DATA_TYPES fp16 int16 fp32 int32)
-set(DATA_TYPE_GLSL float16_t int16_t float int)
+set(DATA_TYPES fp16 int16 fp32 int32 int8)
+set(DATA_TYPE_GLSL float16_t int16_t float int int8_t)
 
 set(ALL_SPVS "")
 
 foreach(op_idx RANGE 0 9)
     list(GET OPS ${op_idx} op_name)
     list(GET OP_IDS ${op_idx} op_id)
-    foreach(dt_idx RANGE 0 3)
+    foreach(dt_idx RANGE 0 4)
         list(GET DATA_TYPES ${dt_idx} dt_name)
         list(GET DATA_TYPE_GLSL ${dt_idx} dt_glsl)
         set(spv_name "shaders/${op_name}_${dt_name}.spv")

@@ -93,8 +93,9 @@ static void parse_data_types(AppArgs* args, const char* str) {
         else if (strcmp(trimmed, "int16") == 0) dt = DT_INT16;
         else if (strcmp(trimmed, "fp32") == 0) dt = DT_FP32;
         else if (strcmp(trimmed, "int32") == 0) dt = DT_INT32;
+        else if (strcmp(trimmed, "int8") == 0) dt = DT_INT8;
         else {
-            fprintf(stderr, "Error: Unknown data type %s (use fp16, int16, fp32, or int32)\n", trimmed);
+            fprintf(stderr, "Error: Unknown data type %s (use fp16, int16, fp32, int32, or int8)\n", trimmed);
             exit(1);
         }
         args->multi_data_types[args->multi_data_type_count++] = dt;
@@ -255,7 +256,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -mis, --matrix-increment-step <step>   Set matrix incrementstep (default: 32)\n");
             printf("  -i, --iterations <count>               Set benchmarking iterations (default: 10)\n");
             printf("  -d, --device <index>                   Select Vulkan device index (default: 0)\n");
-            printf("  -dt, --data-type <type>                Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
+            printf("  -dt, --data-type <type>                Select data type: fp16, int16, fp32, int32, int8 (default: fp16)\n");
             printf("  -dl, --device-list                     List available Vulkan devices and exit\n");
             printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad, mat-mul, mat-add, mat-sub, mat-div, mat-mad (default: mul)\n");
             printf("  -csv, --save-csv                       Save results to CSV file\n");

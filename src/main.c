@@ -77,6 +77,7 @@ static const char* get_datatype_name(DataType dt) {
         case DT_INT16: return "INT16";
         case DT_FP32: return "FP32";
         case DT_INT32: return "INT32";
+        case DT_INT8: return "INT8";
         default: return "UNKNOWN";
     }
 }
@@ -192,6 +193,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         case DT_INT16: type_str = "INT16"; perf_label = "GOPS"; elementSize = 2; break;
         case DT_FP32: type_str = "FP32"; perf_label = "GFLOPS"; elementSize = 4; break;
         case DT_INT32: type_str = "INT32"; perf_label = "GOPS"; elementSize = 4; break;
+        case DT_INT8: type_str = "INT8"; perf_label = "GOPS"; elementSize = 1; break;
     }
 
     const char* op_str = "MUL";
@@ -213,11 +215,11 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     char shaderFileBuf[64];
     if (is_elemop) {
         const char* op_names[] = {"mul", "add", "sub", "div", "mad"};
-        const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
+        const char* dt_names[] = {"fp16", "int16", "fp32", "int32", "int8"};
         snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type], dt_names[args.data_type]);
     } else {
         const char* op_names[] = {"matmul", "matadd", "matsub", "matdiv", "matmad"};
-        const char* dt_names[] = {"fp16", "int16", "fp32", "int32"};
+        const char* dt_names[] = {"fp16", "int16", "fp32", "int32", "int8"};
 //check args.operator_type
         snprintf(shaderFileBuf, sizeof(shaderFileBuf), "shaders/%s_%s.spv", op_names[args.operator_type - 5], dt_names[args.data_type]);
     }
@@ -316,17 +318,25 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     VkPhysicalDeviceShaderFloat16Int8Features float16Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES,
         .shaderFloat16 = VK_TRUE,
+        .shaderInt8 = VK_TRUE,
+    };
+
+    VkPhysicalDevice8BitStorageFeatures storage8Features = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES,
+        .pNext = &float16Features,
+        .storageBuffer8BitAccess = VK_TRUE,
     };
 
     VkPhysicalDevice16BitStorageFeatures storage16Features = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES,
-        .pNext = &float16Features,
+        .pNext = &storage8Features,
         .storageBuffer16BitAccess = VK_TRUE,
     };
 
     const char* deviceExtensions[] = {
         VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
         VK_KHR_16BIT_STORAGE_EXTENSION_NAME,
+        VK_KHR_8BIT_STORAGE_EXTENSION_NAME,
         VK_KHR_STORAGE_BUFFER_STORAGE_CLASS_EXTENSION_NAME
     };
 
@@ -336,7 +346,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         .pEnabledFeatures = &deviceFeatures,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
-        .enabledExtensionCount = 3,
+        .enabledExtensionCount = 4,
         .ppEnabledExtensionNames = deviceExtensions,
     };
 
@@ -404,6 +414,13 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     } else if (args.data_type == DT_INT32) {
         int32_t* iA = (int32_t*)dataA_mapped;
         int32_t* iB = (int32_t*)dataB_mapped;
+        for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
+            iA[i] = 1;
+            iB[i] = 2;
+        }
+    } else if (args.data_type == DT_INT8) {
+        int8_t* iA = (int8_t*)dataA_mapped;
+        int8_t* iB = (int8_t*)dataB_mapped;
         for (uint32_t i = 0; i < N_SIZE * N_SIZE; i++) {
             iA[i] = 1;
             iB[i] = 2;
@@ -803,7 +820,7 @@ int main(int argc, char** argv) {
 
             // Format headers
             const char* perf_label = "GFLOPS";
-            if (temp_args.data_type == DT_INT16 || temp_args.data_type == DT_INT32) {
+            if (temp_args.data_type == DT_INT16 || temp_args.data_type == DT_INT32 || temp_args.data_type == DT_INT8) {
                 perf_label = "GOPS";
             }
 
@@ -813,6 +830,7 @@ int main(int argc, char** argv) {
                 case DT_INT16: type_str = "INT16"; break;
                 case DT_FP32: type_str = "FP32"; break;
                 case DT_INT32: type_str = "INT32"; break;
+                case DT_INT8: type_str = "INT8"; break;
             }
 
             const char* op_str = "MUL";
