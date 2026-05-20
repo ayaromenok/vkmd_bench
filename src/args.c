@@ -166,7 +166,7 @@ AppArgs parse_args(int argc, char** argv) {
         .list_devices = 0, 
         .save_csv = 0,
         .multi_bench = 0,
-        .lact_profile = "210_405",
+        .lact_profile = "0_210_405",
         .data_type = DT_FP16,
         .operator_type = OP_MUL,
         .multi_operator_count = 0,
@@ -257,10 +257,10 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -d, --device <index>                   Select Vulkan device index (default: 0)\n");
             printf("  -dt, --data-type <type>                Select data type: fp16, int16, fp32, int32 (default: fp16)\n");
             printf("  -dl, --device-list                     List available Vulkan devices and exit\n");
-            printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad (default: mul)\n");
+            printf("  -o, --operator <op>                    Select operator: mul, add, sub, div, mad, mat-mul, mat-add, mat-sub, mat-div, mat-mad (default: mul)\n");
             printf("  -csv, --save-csv                       Save results to CSV file\n");
             printf("  -mdb, --multi-device-bench             Benchmark device 0 and 2 side-by-side\n");
-            printf("  -l, --lact <profile>                   Set LACT profile name string (default: 210_405)\n");
+            printf("  -l, --lact <profile>                   Set LACT profile name string (default: 0_210_405 (device_GPU_VRAM frequency)\n");
             printf("  -p, --pause <seconds>                  Set pause between tests in seconds (default: 0)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);

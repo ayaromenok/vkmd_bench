@@ -10,17 +10,17 @@
 #include <sys/types.h>
 
 #ifndef APP_VERSION_HASH
-#define APP_VERSION_HASH "unknown"
+#define APP_VERSION_HASH "fcc2027"
 #endif
 #ifndef APP_VERSION_COMMIT_COUNT
 #define APP_VERSION_COMMIT_COUNT "0"
 #endif
 #ifndef APP_VERSION_BUILD_DATETIME
-#define APP_VERSION_BUILD_DATETIME "unknown"
+#define APP_VERSION_BUILD_DATETIME "202605130800"
 #endif
 
 static void get_app_version(char* buf, size_t max_len) {
-    snprintf(buf, max_len, "v0.1.%s-g%s (%s)", APP_VERSION_COMMIT_COUNT, APP_VERSION_HASH, APP_VERSION_BUILD_DATETIME);
+    snprintf(buf, max_len, "v0.2.%s-g%s (%s)", APP_VERSION_COMMIT_COUNT, APP_VERSION_HASH, APP_VERSION_BUILD_DATETIME);
 }
 
 //it's not a WG size from GPU
@@ -645,7 +645,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
             // MatMul: 2*N^3 operations
             gops = (2.0 * (double)current_n * current_n * current_n) / (avg_time * 1e9);
         }
-
+//todo - add verbose level - this one is +1
         if (!silent) {
             printf("| %4u x %-4u | %12.3f |\n", current_n, current_n, gops);
             fflush(stdout);
