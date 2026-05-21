@@ -24,7 +24,7 @@ Configuring Device 2 (CMP 70HX) profile: "2_210_405"
 Running benchmarks on Device 2...
 ```
 
-#### Multi Device Results: MUL FP16
+#### Multi Device Results: MAT-MUL FP16
 
 | Matrix Size | NVIDIA A4000, GFLOPS | NVIDIA 70HX, GFLOPS | AMD Vega7, GFLOPS |
 | :--- | :---: | :---: | :---: |
