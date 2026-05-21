@@ -20,7 +20,7 @@
 #endif
 
 static void get_app_version(char* buf, size_t max_len) {
-    snprintf(buf, max_len, "v0.2.%s-g%s (%s)", APP_VERSION_COMMIT_COUNT, APP_VERSION_HASH, APP_VERSION_BUILD_DATETIME);
+    snprintf(buf, max_len, "v0.3.%s-g%s (%s)", APP_VERSION_COMMIT_COUNT, APP_VERSION_HASH, APP_VERSION_BUILD_DATETIME);
 }
 
 //it's not a WG size from GPU
@@ -365,93 +365,12 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     VkQueue queue;
     vkGetDeviceQueue(device, computeQueueFamilyIndex, 0, &queue);
 
-    size_t matrixSize;
-    size_t totalElements;
-    if (args.dimension == 1) {
-        matrixSize = (size_t)N_SIZE * elementSize;
-        totalElements = (size_t)N_SIZE;
-    } else if (args.dimension == 2) {
-        matrixSize = (size_t)N_SIZE * N_SIZE * elementSize;
-        totalElements = (size_t)N_SIZE * N_SIZE;
-    } else {
-        matrixSize = (size_t)N_SIZE * N_SIZE * N_SIZE * elementSize;
-        totalElements = (size_t)N_SIZE * N_SIZE * N_SIZE;
-    }
-    VkBuffer bufferA, bufferB, bufferC;
-    VkDeviceMemory memoryA, memoryB, memoryC;
 
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferA, &memoryA);
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferB, &memoryB);
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferC, &memoryC);
-
-    VkBuffer stagingA, stagingB, stagingC;
-    VkDeviceMemory stagingMemoryA, stagingMemoryB, stagingMemoryC;
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingA, &stagingMemoryA);
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingB, &stagingMemoryB);
-    createBuffer(device, physicalDevice, matrixSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingC, &stagingMemoryC);
-
-    void *dataA_mapped = NULL, *dataB_mapped = NULL;
-    VkResult resA = vkMapMemory(device, stagingMemoryA, 0, matrixSize, 0, &dataA_mapped);
-    VkResult resB = vkMapMemory(device, stagingMemoryB, 0, matrixSize, 0, &dataB_mapped);
-    
-    if (resA != VK_SUCCESS || dataA_mapped == NULL) {
-        fprintf(stderr, "Failed to map staging memory A (res: %d)\n", resA);
-        exit(1);
-    }
-    if (resB != VK_SUCCESS || dataB_mapped == NULL) {
-        fprintf(stderr, "Failed to map staging memory B (res: %d)\n", resB);
-        exit(1);
-    }
-
-    if (args.data_type == DT_FP16) {
-        uint16_t* hA = (uint16_t*)dataA_mapped;
-        uint16_t* hB = (uint16_t*)dataB_mapped;
-        for (uint32_t i = 0; i < totalElements; i++) {
-            hA[i] = float32_to_float16(1.0f);
-            hB[i] = float32_to_float16(2.0f);
-        }
-    } else if (args.data_type == DT_INT16) {
-        int16_t* iA = (int16_t*)dataA_mapped;
-        int16_t* iB = (int16_t*)dataB_mapped;
-        for (uint32_t i = 0; i < totalElements; i++) {
-            iA[i] = 1;
-            iB[i] = 2;
-        }
-    } else if (args.data_type == DT_FP32) {
-        float* fA = (float*)dataA_mapped;
-        float* fB = (float*)dataB_mapped;
-        for (uint32_t i = 0; i < totalElements; i++) {
-            fA[i] = 1.0f;
-            fB[i] = 2.0f;
-        }
-    } else if (args.data_type == DT_INT32) {
-        int32_t* iA = (int32_t*)dataA_mapped;
-        int32_t* iB = (int32_t*)dataB_mapped;
-        for (uint32_t i = 0; i < totalElements; i++) {
-            iA[i] = 1;
-            iB[i] = 2;
-        }
-    } else if (args.data_type == DT_INT8) {
-        int8_t* iA = (int8_t*)dataA_mapped;
-        int8_t* iB = (int8_t*)dataB_mapped;
-        for (uint32_t i = 0; i < totalElements; i++) {
-            iA[i] = 1;
-            iB[i] = 2;
-        }
-    }
-    vkUnmapMemory(device, stagingMemoryA);
-    vkUnmapMemory(device, stagingMemoryB);
 
     FILE* f_shader = fopen(shaderFile, "rb");
     if (!f_shader) {
         fprintf(stderr, "Error: Could not open %s. Make sure it is in the current directory.\n", shaderFile);
         // clean up basic resources
-        vkDestroyBuffer(device, bufferA, NULL); vkFreeMemory(device, memoryA, NULL);
-        vkDestroyBuffer(device, bufferB, NULL); vkFreeMemory(device, memoryB, NULL);
-        vkDestroyBuffer(device, bufferC, NULL); vkFreeMemory(device, memoryC, NULL);
-        vkDestroyBuffer(device, stagingA, NULL); vkFreeMemory(device, stagingMemoryA, NULL);
-        vkDestroyBuffer(device, stagingB, NULL); vkFreeMemory(device, stagingMemoryB, NULL);
-        vkDestroyBuffer(device, stagingC, NULL); vkFreeMemory(device, stagingMemoryC, NULL);
         vkDestroyDevice(device, NULL);
         free(queueFamilies);
         free(devices);
@@ -502,17 +421,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     VkDescriptorSet descriptorSet;
     vkAllocateDescriptorSets(device, &setAllocInfo, &descriptorSet);
 
-    VkDescriptorBufferInfo bufferInfos[3] = {
-        {bufferA, 0, matrixSize},
-        {bufferB, 0, matrixSize},
-        {bufferC, 0, matrixSize},
-    };
-    VkWriteDescriptorSet writes[3] = {
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[0]},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 1, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[1]},
-        {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[2]},
-    };
-    vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+
 
     VkShaderModuleCreateInfo shaderInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -601,20 +510,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         }
     }
 
-    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-    VkBufferCopy copyRegion = { .srcOffset = 0, .dstOffset = 0, .size = matrixSize };
-    vkCmdCopyBuffer(commandBuffer, stagingA, bufferA, 1, &copyRegion);
-    vkCmdCopyBuffer(commandBuffer, stagingB, bufferB, 1, &copyRegion);
-    vkEndCommandBuffer(commandBuffer);
 
-    VkSubmitInfo copySubmitInfo = {
-        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &commandBuffer,
-    };
-    vkQueueSubmit(queue, 1, &copySubmitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
 
     if (!silent) {
         printf("LACT Profile: %s\n", args.lact_profile);
@@ -643,6 +539,111 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
 
     for (uint32_t current_n = args.matrix_start_size; ; ) {
         if (current_n > N_SIZE) break;
+
+        size_t currentMatrixSize;
+        size_t currentTotalElements;
+        if (args.dimension == 1) {
+            currentMatrixSize = (size_t)current_n * elementSize;
+            currentTotalElements = (size_t)current_n;
+        } else if (args.dimension == 2) {
+            currentMatrixSize = (size_t)current_n * current_n * elementSize;
+            currentTotalElements = (size_t)current_n * current_n;
+        } else {
+            currentMatrixSize = (size_t)current_n * current_n * current_n * elementSize;
+            currentTotalElements = (size_t)current_n * current_n * current_n;
+        }
+
+        VkBuffer bufferA, bufferB, bufferC;
+        VkDeviceMemory memoryA, memoryB, memoryC;
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferA, &memoryA);
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferB, &memoryB);
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &bufferC, &memoryC);
+
+        VkBuffer stagingA, stagingB, stagingC;
+        VkDeviceMemory stagingMemoryA, stagingMemoryB, stagingMemoryC;
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingA, &stagingMemoryA);
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingB, &stagingMemoryB);
+        createBuffer(device, physicalDevice, currentMatrixSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingC, &stagingMemoryC);
+
+        void *dataA_mapped = NULL, *dataB_mapped = NULL;
+        VkResult resA = vkMapMemory(device, stagingMemoryA, 0, currentMatrixSize, 0, &dataA_mapped);
+        VkResult resB = vkMapMemory(device, stagingMemoryB, 0, currentMatrixSize, 0, &dataB_mapped);
+        
+        if (resA != VK_SUCCESS || dataA_mapped == NULL) {
+            fprintf(stderr, "Failed to map staging memory A (res: %d)\n", resA);
+            exit(1);
+        }
+        if (resB != VK_SUCCESS || dataB_mapped == NULL) {
+            fprintf(stderr, "Failed to map staging memory B (res: %d)\n", resB);
+            exit(1);
+        }
+
+        if (args.data_type == DT_FP16) {
+            uint16_t* hA = (uint16_t*)dataA_mapped;
+            uint16_t* hB = (uint16_t*)dataB_mapped;
+            for (uint32_t i = 0; i < currentTotalElements; i++) {
+                hA[i] = float32_to_float16(1.0f);
+                hB[i] = float32_to_float16(2.0f);
+            }
+        } else if (args.data_type == DT_INT16) {
+            int16_t* iA = (int16_t*)dataA_mapped;
+            int16_t* iB = (int16_t*)dataB_mapped;
+            for (uint32_t i = 0; i < currentTotalElements; i++) {
+                iA[i] = 1;
+                iB[i] = 2;
+            }
+        } else if (args.data_type == DT_FP32) {
+            float* fA = (float*)dataA_mapped;
+            float* fB = (float*)dataB_mapped;
+            for (uint32_t i = 0; i < currentTotalElements; i++) {
+                fA[i] = 1.0f;
+                fB[i] = 2.0f;
+            }
+        } else if (args.data_type == DT_INT32) {
+            int32_t* iA = (int32_t*)dataA_mapped;
+            int32_t* iB = (int32_t*)dataB_mapped;
+            for (uint32_t i = 0; i < currentTotalElements; i++) {
+                iA[i] = 1;
+                iB[i] = 2;
+            }
+        } else if (args.data_type == DT_INT8) {
+            int8_t* iA = (int8_t*)dataA_mapped;
+            int8_t* iB = (int8_t*)dataB_mapped;
+            for (uint32_t i = 0; i < currentTotalElements; i++) {
+                iA[i] = 1;
+                iB[i] = 2;
+            }
+        }
+        vkUnmapMemory(device, stagingMemoryA);
+        vkUnmapMemory(device, stagingMemoryB);
+
+        VkDescriptorBufferInfo bufferInfos[3] = {
+            {bufferA, 0, currentMatrixSize},
+            {bufferB, 0, currentMatrixSize},
+            {bufferC, 0, currentMatrixSize},
+        };
+        VkWriteDescriptorSet writes[3] = {
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 0, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[0]},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 1, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[1]},
+            {.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = descriptorSet, .dstBinding = 2, .descriptorCount = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .pBufferInfo = &bufferInfos[2]},
+        };
+        vkUpdateDescriptorSets(device, 3, writes, 0, NULL);
+
+        VkCommandBufferBeginInfo copyBeginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        vkBeginCommandBuffer(commandBuffer, &copyBeginInfo);
+        VkBufferCopy copyRegion = { .srcOffset = 0, .dstOffset = 0, .size = currentMatrixSize };
+        vkCmdCopyBuffer(commandBuffer, stagingA, bufferA, 1, &copyRegion);
+        vkCmdCopyBuffer(commandBuffer, stagingB, bufferB, 1, &copyRegion);
+        vkEndCommandBuffer(commandBuffer);
+
+        VkSubmitInfo copySubmitInfo = {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &commandBuffer,
+        };
+        vkQueueSubmit(queue, 1, &copySubmitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(queue);
+
         // Record command buffer for current size
         VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
@@ -716,6 +717,14 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
             fflush(csv_file);
         }
 
+        // Clean up Vulkan resources for this iteration
+        vkDestroyBuffer(device, bufferA, NULL); vkFreeMemory(device, memoryA, NULL);
+        vkDestroyBuffer(device, bufferB, NULL); vkFreeMemory(device, memoryB, NULL);
+        vkDestroyBuffer(device, bufferC, NULL); vkFreeMemory(device, memoryC, NULL);
+        vkDestroyBuffer(device, stagingA, NULL); vkFreeMemory(device, stagingMemoryA, NULL);
+        vkDestroyBuffer(device, stagingB, NULL); vkFreeMemory(device, stagingMemoryB, NULL);
+        vkDestroyBuffer(device, stagingC, NULL); vkFreeMemory(device, stagingMemoryC, NULL);
+
         if (current_n >= N_SIZE) break;
         uint32_t next_n = current_n + args.matrix_step_size;
         if (next_n > N_SIZE) next_n = N_SIZE;
@@ -737,12 +746,7 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
     vkDestroyDescriptorPool(device, descriptorPool, NULL);
     vkDestroyDescriptorSetLayout(device, descriptorSetLayout, NULL);
     
-    vkDestroyBuffer(device, bufferA, NULL); vkFreeMemory(device, memoryA, NULL);
-    vkDestroyBuffer(device, bufferB, NULL); vkFreeMemory(device, memoryB, NULL);
-    vkDestroyBuffer(device, bufferC, NULL); vkFreeMemory(device, memoryC, NULL);
-    vkDestroyBuffer(device, stagingA, NULL); vkFreeMemory(device, stagingMemoryA, NULL);
-    vkDestroyBuffer(device, stagingB, NULL); vkFreeMemory(device, stagingMemoryB, NULL);
-    vkDestroyBuffer(device, stagingC, NULL); vkFreeMemory(device, stagingMemoryC, NULL);
+
     
     vkDestroyDevice(device, NULL);
     free(code);
