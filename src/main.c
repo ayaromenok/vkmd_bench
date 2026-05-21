@@ -935,14 +935,14 @@ int main(int argc, char** argv) {
             // Save CSV side-by-side if required
             if (temp_args.save_csv) {
                 char filename[256];
-                snprintf(filename, sizeof(filename), "output/multi_bench_%s_%s_%dD.csv", op_str, type_str, temp_args.dimension);
+                snprintf(filename, sizeof(filename), "output/vkmd_bench_%s_%s_%dD.csv", op_str, type_str, temp_args.dimension);
                 FILE* csv_file = fopen(filename, "w");
                 if (csv_file) {
                     char version[128];
                     get_app_version(version, sizeof(version));
                     fprintf(csv_file, "Version: %s\n", version);
-                    fprintf(csv_file, "Operator: %s\n", op_str);
-                    fprintf(csv_file, "DataType: %s\n", type_str);
+                    fprintf(csv_file, "Operator: %s, ", op_str);
+                    fprintf(csv_file, "DataType: %s, ", type_str);
                     fprintf(csv_file, "Dimension: %dD\n", temp_args.dimension);
                     fprintf(csv_file, "LACT Profiles: ");
                     for (uint32_t d = 0; d < temp_args.multi_device_count; d++) {
