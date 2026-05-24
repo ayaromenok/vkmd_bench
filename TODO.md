@@ -1,5 +1,5 @@
 - [x] re-create matrix data on every change of dimentions during benchmark
-- add duration of tests in seconds (optionally) additionally to iterations count
+- [x] add duration of tests in seconds (optionally) additionally to iterations count
 - read power usage and temp of GPU during test run using nvidia-smi (or rocm-smi on AMD)
 - read gpu/vram clocks and utilization during test run (nvidia-smi or rocm-smi)
 

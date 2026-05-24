@@ -50,6 +50,7 @@ typedef struct {
     
     uint32_t pause_sec;
     uint32_t dimension;
+    double duration_sec;
 } AppArgs;
 
 AppArgs parse_args(int argc, char** argv);

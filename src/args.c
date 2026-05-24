@@ -157,6 +157,8 @@ static void load_from_ini(AppArgs* args, const char* filepath) {
             if (d_val == 1 || d_val == 2 || d_val == 3) {
                 args->dimension = d_val;
             }
+        } else if (strcmp(key, "duration") == 0 || strcmp(key, "dr") == 0) {
+            args->duration_sec = atof(val);
         }
     }
     fclose(file);
@@ -178,7 +180,8 @@ AppArgs parse_args(int argc, char** argv) {
         .multi_operator_count = 0,
         .multi_data_type_count = 0,
         .pause_sec = 0,
-        .dimension = 2
+        .dimension = 2,
+        .duration_sec = 0.0
     };
     
     // Load options from settings.ini if present, which can then be overridden by cmd line args
@@ -267,6 +270,17 @@ AppArgs parse_args(int argc, char** argv) {
                 fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 exit(1);
             }
+        } else if (strcmp(argv[i], "-dr") == 0 || strcmp(argv[i], "--duration") == 0) {
+            if (i + 1 < argc) {
+                args.duration_sec = atof(argv[++i]);
+                if (args.duration_sec <= 0.0) {
+                    fprintf(stderr, "Error: Duration must be a positive number of seconds\n");
+                    exit(1);
+                }
+            } else {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                exit(1);
+            }
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -283,6 +297,7 @@ AppArgs parse_args(int argc, char** argv) {
             printf("  -l, --lact <profile>                   Set LACT profile name string (default: 0_210_405 (device_GPU_VRAM frequency)\n");
             printf("  -p, --pause <seconds>                  Set pause between tests in seconds (default: 0)\n");
             printf("  -dm, --dimention <1|2|3>               Set matrix dimension: 1D, 2D, or 3D (default: 2)\n");
+            printf("  -dr, --duration <seconds>              Set benchmark duration per matrix size in seconds (default: 1)\n");
             printf("  -h, --help                             Show this help message\n");
             exit(0);
         } else {

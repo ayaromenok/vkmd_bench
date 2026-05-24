@@ -664,10 +664,11 @@ double* run_benchmark_on_device(AppArgs args, uint32_t target_device, int silent
         vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(queue);
 
-        // Run for approximately 1 second
+        // Run for the configured duration (default: 1 second)
+        double bench_duration = (args.duration_sec > 0.0) ? args.duration_sec : 1.0;
         uint32_t count = 0;
         double start_time = get_time_sec();
-        while (get_time_sec() - start_time < 1.0) {
+        while (get_time_sec() - start_time < bench_duration) {
             vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
             vkQueueWaitIdle(queue);
             count++;
